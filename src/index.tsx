@@ -285,8 +285,10 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       if (_.startsWith('nsec')) {
         sk = decode(_).data as Uint8Array;
         pubkey = getPublicKey(sk);
-      } else {
+      } else if (_.startsWith('npub')) {
         pubkey = decode(_).data as string;
+      } else {
+        pubkey = _;
       }
       signersStore.external = {
         pk: pubkey,
@@ -438,3 +440,7 @@ customElement<ZapThreadsAttributes>('zap-threads', {
 export type ZapThreadsAttributes = {
   [key in 'anchor' | 'version' | 'relays' | 'user' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url']?: string;
 } & JSX.HTMLAttributes<HTMLElement>;
+
+export function setLoginCallback(onLogin?: () => Promise<void>) {
+  store.onLogin = onLogin;
+}

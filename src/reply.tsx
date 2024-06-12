@@ -24,6 +24,11 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
   // Sessions
 
   const login = async () => {
+    if (store.onLogin) {
+      await store.onLogin();
+      return;
+    }
+
     if (!window.nostr) {
       onError('Error: No NIP-07 extension!');
       return;

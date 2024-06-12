@@ -47,6 +47,7 @@ export type PreferencesStore = {
 
   anchorAuthor?: string;
   profiles: () => Profile[];
+  onLogin?: () => Promise<void>;
 };
 
 export type Anchor = { type: 'http' | 'naddr' | 'note' | 'error', value: string; };
