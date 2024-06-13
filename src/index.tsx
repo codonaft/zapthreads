@@ -381,8 +381,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   const reactions = watchAll(() => ['reactions']);
   const votes = () => reactions().filter(r => voteKind(r) !== 0);
 
-  const [showAdvanced, setShowAdvanced] = createSignal(false);
-
   return <>
     <div id="ztr-root">
       <style>{style}</style>
@@ -402,11 +400,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         </h2>
         <Thread nestedEvents={nestedEvents} articles={articles} votes={votes} />
       </>}
-
-      <div style="float:right; opacity: 0.2;" onClick={() => setShowAdvanced(!showAdvanced())}>{ellipsisSvg()}</div>
-      {showAdvanced() && <><p>Powered by <a href="https://github.com/fr4nzap/zapthreads">zapthreads</a></p>
-        {store.version && <p>Anchor version: {store.version}</p>}
-        <button onClick={clearCache}>Clear cache</button></>}
     </div></>;
 };
 
