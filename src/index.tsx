@@ -283,8 +283,9 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       let pubkey: string;
       let sk: Uint8Array | undefined;
       if (_.startsWith('nsec')) {
-        sk = decode(_).data as Uint8Array;
-        pubkey = getPublicKey(sk);
+        /*sk = decode(_).data as Uint8Array;
+        pubkey = getPublicKey(sk);*/
+        return;
       } else if (_.startsWith('npub')) {
         pubkey = decode(_).data as string;
       } else {

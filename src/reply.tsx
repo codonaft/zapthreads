@@ -85,14 +85,15 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
     if (profile) {
       signer = signersStore.active;
     } else {
-      if (!signersStore.anonymous) {
+      return;
+      /*if (!signersStore.anonymous) {
         const sk = generateSecretKey();
         signersStore.anonymous = {
           pk: getPublicKey(sk),
           signEvent: async (event) => ({ sig: finalizeEvent(event, sk).sig }),
         };
       }
-      signer = signersStore.anonymous;
+      signer = signersStore.anonymous;*/
     }
 
     if (!signer?.signEvent) {
@@ -245,10 +246,10 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
           Reply as {loggedInUser()!.n || shortenEncodedId(npubEncode(loggedInUser()!.pk))}
         </button>}
 
-      {!loggedInUser() && !store.disableFeatures!.includes('replyAnonymously') &&
+      {/*!loggedInUser() && !store.disableFeatures!.includes('replyAnonymously') &&
         <button disabled={loading()} class="ztr-reply-button" onClick={() => publish()}>
           Reply anonymously
-        </button>}
+        </button>*/}
 
       {!loggedInUser() && <button class="ztr-reply-login-button" onClick={() => login()}>Log in</button>}
     </div>
