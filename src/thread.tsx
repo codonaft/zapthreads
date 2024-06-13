@@ -6,7 +6,6 @@ import { noteEncode, npubEncode } from "nostr-tools/nip19";
 import { UnsignedEvent, Event } from "nostr-tools/core";
 import { getEventHash, finalizeEvent } from "nostr-tools/pure";
 import { Relay } from "nostr-tools/relay";
-import { createElementSize } from "@solid-primitives/resize-observer";
 import { EventSigner, signersStore, store } from "./util/stores.ts";
 import { NoteEvent, Profile, Pk, ReactionEvent, VoteKind, Eid, voteKind } from "./util/models.ts";
 import { remove } from "./util/db.ts";
@@ -24,6 +23,7 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
         (event) => {
           const [isOpen, setOpen] = createSignal(false);
           const [isExpanded, setExpanded] = createSignal(false);
+          const [overflowed, setOverflowed] = createSignal(false);
           const [isThreadCollapsed, setThreadCollapsed] = createSignal(false);
 
           const [votesCount, setVotesCount] = createSignal(0);
@@ -139,8 +139,8 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           };
 
           const MAX_HEIGHT = 120;
+          const MAX_LENGTH = 255;
           const [target, setTarget] = createSignal<HTMLElement>();
-          const size = createElementSize(target);
 
           const [profilePicture, setProfilePicture] = createSignal(defaultPicture);
 
@@ -196,6 +196,14 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
 
           onCleanup(() => clearInterval(timer));
 
+          const parsedContent = createMemo(() => {
+            const result = parseContent(event(), store, props.articles());
+            if (!overflowed() && result.length > MAX_LENGTH) {
+              setOverflowed(true);
+            }
+            return result;
+          });
+
           return <div class="ztr-comment">
             <div class="ztr-comment-body">
               <div class="ztr-comment-info-wrapper">
@@ -222,10 +230,10 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
                 ref={setTarget}
                 classList={{ "ztr-comment-text": true, "highlight": event().k == 9802 }}
                 style={!isExpanded() ? { 'max-height': `${MAX_HEIGHT}px` } : {}}
-                innerHTML={parseContent(event(), store, props.articles())}>
+                innerHTML={parsedContent()}>
               </div>
 
-              {size.height && size.height >= MAX_HEIGHT &&
+              {overflowed() &&
                 <div class="ztr-comment-expand" onClick={() => setExpanded(!isExpanded())}>
                   <span>{isExpanded() ? 'Show less' : 'Read more'}</span>
                 </div>}
