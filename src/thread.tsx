@@ -1,4 +1,4 @@
-import { Index, Show, createEffect, createMemo, createSignal, onCleanup, batch } from "solid-js";
+import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on } from "solid-js";
 import { currentTime, defaultPicture, parseContent, shortenEncodedId, sortByDate, svgWidth, timeAgo, totalChildren } from "./util/ui.ts";
 import { ReplyEditor } from "./reply.tsx";
 import { NestedNoteEvent } from "./util/nest.ts";
@@ -15,6 +15,8 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
   const anchor = () => store.anchor!;
   const profiles = store.profiles!;
   const relays = () => store.relays!;
+
+  const MIN_AUTO_COLLAPSED_COMMENTS = 5;
 
   return <div class="ztr-thread">
     <Index each={sortByDate(props.nestedEvents())}>
@@ -167,6 +169,12 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           const action = () => event().k === 9802 ? 'highlight' : (isAnchorMentioned() ? 'mention' : 'comment');
 
           const total = createMemo(() => totalChildren(event()));
+
+          if (!event().parent) {
+            const [autoCollapsed, setAutoCollapsed] = createSignal(false);
+            createComputed(on([total, autoCollapsed],
+              () => total() >= MIN_AUTO_COLLAPSED_COMMENTS && !autoCollapsed() && setAutoCollapsed(true) && setThreadCollapsed(true)));
+          }
 
           const isUnspecifiedVersion = () =>
             // if it does not have a parent or rootId
