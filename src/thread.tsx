@@ -23,7 +23,6 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           const [isOpen, setOpen] = createSignal(false);
           const [isExpanded, setExpanded] = createSignal(false);
           const [isThreadCollapsed, setThreadCollapsed] = createSignal(false);
-          const [showInfo, setShowInfo] = createSignal(false);
 
           const [votesCount, setVotesCount] = createSignal(0);
           const [currentUserVote, setCurrentUserVote] = createSignal(0);
@@ -199,18 +198,14 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
                   <ul class="ztr-comment-info-items">
                     <li class="ztr-comment-info-author">
                       <a href={store.urlPrefixes!.npub + npub()} target="_blank" >{profile()?.n || shortenEncodedId(npub())}</a>
-                      <span style="white-space: nowrap;"><strong> {action()}ed</strong> {createdTimeAgo()}</span></li>
+                      <span style="white-space: nowrap;"><a href={store.urlPrefixes!.note + noteEncode(event().id)} target="_blank" style="font-weight: 400"><small>{action()}ed {createdTimeAgo()}</small></a></span>
+                    </li>
                     {total() > 0 && size.width! > 600 &&
                       <>
                         <li>●</li>
                         <li>{total()} repl{total() > 1 ? 'ies' : 'y'}{isThreadCollapsed() ? ' (hidden)' : ''}</li>
                       </>
                     }
-                    <li>
-                      <a class="ztr-comment-info-dots" onClick={() => setShowInfo(!showInfo())}>
-                        {ellipsisSvg()}
-                      </a>
-                    </li>
                   </ul>
                 </div>
                 <ul class="ztr-comment-info-items">
@@ -221,12 +216,6 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
                   </li>}
                 </ul>
               </div>
-
-              {showInfo() &&
-                <div class="ztr-info-pane">
-                  <a href={store.urlPrefixes!.note + noteEncode(event().id)} target="_blank"><small>Event data</small></a>
-                  {/* <pre>{JSON.stringify(event(), ['id', 'ts', 'pk', 'ro', 're', 'me', 'a', 'am', 'p'], 2)}</pre> */}
-                </div>}
 
               <div class="ztr-comment-text">
                 {isMissingEvent() && <p class="warning">{warningSvg()}<span>This is a {action()} that referenced this article in <a href={store.urlPrefixes!.note + noteEncode(event().ro!)}>another thread</a></span></p>}
@@ -274,7 +263,7 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
                   </li>
                 </Show> */}
                 <Show when={!store.disableFeatures!.includes('reply')}>
-                  <li class="ztr-comment-action-reply" onClick={() => setOpen(!isOpen()) && setShowInfo(false)}>
+                  <li class="ztr-comment-action-reply" onClick={() => setOpen(!isOpen())}>
                     {replySvg()}
                     <span>{isOpen() ? 'Cancel' : 'Reply'}</span>
                   </li>
