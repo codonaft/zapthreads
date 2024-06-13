@@ -6,7 +6,7 @@ import { generateSecretKey, getPublicKey, getEventHash, finalizeEvent } from "no
 import { createAutofocus } from "@solid-primitives/autofocus";
 import { find, save, watch } from "./util/db.ts";
 import { Profile, eventToNoteEvent } from "./util/models.ts";
-import { lightningSvg, likeSvg } from "./thread.tsx";
+import { lightningSvg, likeSvg, nostrSvg } from "./thread.tsx";
 import { decode, npubEncode } from "nostr-tools/nip19";
 import { Relay } from "nostr-tools/relay";
 import { normalizeURL } from "nostr-tools/utils";
@@ -251,7 +251,9 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
           Reply anonymously
         </button>*/}
 
-      {!loggedInUser() && <button class="ztr-reply-login-button" onClick={() => login()}>Log in</button>}
+      {!loggedInUser() &&
+        <button class="ztr-reply-login-button" onClick={() => login()}>
+          <div style="display: inline-grid; vertical-align: middle">{nostrSvg()}</div>&nbsp;Login</button>}
     </div>
   </div>;
 };
