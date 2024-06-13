@@ -12,7 +12,7 @@
   border: 1px solid transparent;
   word-wrap: break-word;
   /* removes margin collapse */
-  margin-top: 4em;
+  margin-top: 0;
   line-height: 1.2em;
 }
 
@@ -122,7 +122,7 @@ ul.ztr-comment-info-items li a {
 }
 
 .ztr-comment-text p {
-  margin: 0 0 0.5em 0;
+  margin: 0 0 0.1em 0;
 }
 
 .ztr-comment-text code {
@@ -159,7 +159,42 @@ ul.ztr-comment-info-items li a {
 }
 
 .ztr-comment-replies {
-  margin-left: 2em;
+  margin-left: 3em;
+}
+
+.ztr-comment-replies-info-actions {
+}
+
+.ztr-comment-replies-info-items {
+  margin: -0.5em;
+  display: flex;
+  list-style: none;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: #BBB;
+  cursor: pointer;
+  width: 10em;
+  li {
+    padding: 1em;
+    padding-left: 1.3em;
+    margin: -0.8em;
+  }
+}
+
+.ztr-comment-replies-info-items.selected {
+  margin-bottom: 1.1em;
+  color: #0288d1;
+  svg {
+    fill: #0288d1;
+  }
+}
+
+.ztr-comment-replies-info-items:hover svg {
+  fill: #0288d1;
+}
+
+.ztr-comment-replies-info-items:hover li {
+  color: #0288d1;
 }
 
 .highlight p {
@@ -173,16 +208,25 @@ ul.ztr-comment-info-items li a {
 
 .ztr-comment-expand {
   display: flex;
-  justify-content: center;
-}
-
-.ztr-comment-expand span {
-  margin: 1em 0 1em 0.35em;
+  position: relative;
+  /*z-index: 1;*/
+  max-width: fit-content;
+  padding-top: 0.8em;
+  padding-bottom: 0.5em;
+  padding-left: 1.1em;
+  padding-right: 1em;
+  margin-left: 2.4em;
+  margin-top: -1em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
   cursor: pointer;
 }
 
-ul.ztr-comment-actions,
-.ztr-comment-expand {
+.ztr-comment-expand:hover span {
+  color: #0288d1;
+}
+
+ul.ztr-comment-actions {
   display: flex;
   align-items: center;
   list-style: none;
@@ -242,11 +286,11 @@ li.ztr-comment-action-like {
 }
 
 .ztr-comment-action-reply:hover svg {
-  fill: #92379c;
+  fill: #0288d1;
 }
 
 .ztr-comment-action-reply:hover span {
-  color: #92379c;
+  color: #0288d1;
 }
 
 .ztr-comment-action-zap:hover svg {
@@ -462,10 +506,10 @@ li.ztr-comment-action-votes {
   }
 
   .ztr-comment-action-reply:hover svg {
-    fill: #96609c;
+    fill: #0288d1;
   }
 
   .ztr-comment-action-reply:hover span {
-    color: #96609c;
+    color: #0288d1;
   }
 }
