@@ -219,11 +219,9 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
                 </div>
               </div>
 
-              <div class="ztr-comment-text">
-                {isMissingEvent() && <p class="warning">{warningSvg()}<span>This is a {action()} that referenced this article in <a href={store.urlPrefixes!.note + noteEncode(event().ro!)}>another thread</a></span></p>}
-                {isUnspecifiedVersion() && <p class="warning">{warningSvg()}<span>Article contents may have changed since this {action()} was made</span></p>}
-                {isDifferentVersion() && <p class="warning">{warningSvg()}<span>Article contents changed since this {action()} was made</span></p>}
-              </div>
+              {isMissingEvent() && <div class="ztr-comment-text"><p class="warning">{warningSvg()}<span>This is a {action()} that referenced this article in <a href={store.urlPrefixes!.note + noteEncode(event().ro!)}>another thread</a></span></p></div>}
+              {isUnspecifiedVersion() && <div class="ztr-comment-text"><p class="warning">{warningSvg()}<span>Article contents may have changed since this {action()} was made</span></p></div>}
+              {isDifferentVersion() && <div class="ztr-comment-text"><p class="warning">{warningSvg()}<span>Article contents changed since this {action()} was made</span></p></div>}
 
               <div
                 ref={setTarget}
