@@ -68,11 +68,13 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           });
 
           const toggleVote = async (reaction: VoteKind, note: NoteEvent) => {
-            const s = getSigner();
-            if (!s) {
-              return;
+            if (!getSigner()) {
+              const acceptedLogin = store.onLogin && await store.onLogin();
+              if (!acceptedLogin) {
+                return;
+              }
             }
-            const signer = s!;
+            const signer = getSigner()!;
             const latestVote = currentUserVote();
             const newVote = latestVote === reaction ? 0 : reaction;
 

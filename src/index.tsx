@@ -435,6 +435,6 @@ export type ZapThreadsAttributes = {
   [key in 'anchor' | 'version' | 'relays' | 'user' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url']?: string;
 } & JSX.HTMLAttributes<HTMLElement>;
 
-export function setLoginCallback(onLogin?: () => Promise<void>) {
+export function setLoginCallback(onLogin?: () => Promise<boolean>) {
   store.onLogin = onLogin;
 }
