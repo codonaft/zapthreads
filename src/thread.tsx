@@ -138,7 +138,6 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
             }
           };
 
-          const MAX_HEIGHT = 120;
           const MAX_LENGTH = 255;
           const [target, setTarget] = createSignal<HTMLElement>();
 
@@ -228,8 +227,7 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
 
               <div
                 ref={setTarget}
-                classList={{ "ztr-comment-text": true, "highlight": event().k == 9802 }}
-                style={!isExpanded() ? { 'max-height': `${MAX_HEIGHT}px` } : {}}
+                classList={{ "ztr-comment-text": true, "ztr-comment-text-fade": overflowed() && !isExpanded(), "highlight": event().k == 9802 }}
                 innerHTML={parsedContent()}>
               </div>
 
