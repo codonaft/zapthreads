@@ -10,11 +10,18 @@ import { EventSigner, signersStore, store } from "./util/stores.ts";
 import { NoteEvent, Profile, Pk, ReactionEvent, VoteKind, Eid, voteKind } from "./util/models.ts";
 import { remove } from "./util/db.ts";
 
-export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles: () => NoteEvent[]; votes: () => ReactionEvent[]; loggedInUser: () => Profile | undefined; }) => {
+export const Thread = (props: {
+  nestedEvents: () => NestedNoteEvent[];
+  articles: () => NoteEvent[];
+  votes: () => ReactionEvent[];
+  loggedInUser: () => Profile | undefined;
+  firstLevelCommentsLength?: () => number;
+}) => {
   const anchor = () => store.anchor!;
   const profiles = store.profiles!;
   const relays = () => store.relays!;
 
+  const MIN_AUTO_COLLAPSED_THREADS = 3;
   const MIN_AUTO_COLLAPSED_COMMENTS = 5;
 
   return <div class="ztr-thread">
@@ -181,10 +188,11 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           const countedChildren = createMemo(() => countChildren(event(), loggedInUser()));
           const total = () => countedChildren().total;
           const commentedByCurrentUser = () => loggedInUser()?.pk === event().pk || countedChildren().currentUser > 0;
+          const firstLevelCommentsLength = () => props.firstLevelCommentsLength && props.firstLevelCommentsLength() || 0;
 
           if (!event().parent) {
             createComputed(on([total, commentedByCurrentUser],
-              () => setThreadCollapsed(total() >= MIN_AUTO_COLLAPSED_COMMENTS && !commentedByCurrentUser())
+              () => setThreadCollapsed(firstLevelCommentsLength() >= MIN_AUTO_COLLAPSED_THREADS && total() >= MIN_AUTO_COLLAPSED_COMMENTS && !commentedByCurrentUser())
             ));
           }
 
