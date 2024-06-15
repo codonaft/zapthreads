@@ -32,6 +32,7 @@ export const Thread = (props: {
           const [isExpanded, setExpanded] = createSignal(false);
           const [overflowed, setOverflowed] = createSignal(false);
           const [isThreadCollapsed, setThreadCollapsed] = createSignal(false);
+          const [threadCollapseIsClicked, setThreadCollapseIsClicked] = createSignal(false);
 
           const [votesCount, setVotesCount] = createSignal(0);
           const [hasVotes, setHasVotes] = createSignal(false);
@@ -192,7 +193,7 @@ export const Thread = (props: {
 
           if (!event().parent) {
             createComputed(on([total, commentedByCurrentUser],
-              () => setThreadCollapsed(firstLevelCommentsLength() >= MIN_AUTO_COLLAPSED_THREADS && total() >= MIN_AUTO_COLLAPSED_COMMENTS && !commentedByCurrentUser())
+              () => setThreadCollapsed(!threadCollapseIsClicked() && firstLevelCommentsLength() >= MIN_AUTO_COLLAPSED_THREADS && total() >= MIN_AUTO_COLLAPSED_COMMENTS && !commentedByCurrentUser())
             ));
           }
 
@@ -294,7 +295,11 @@ export const Thread = (props: {
               <div class="ztr-comment-replies-info-actions">
                 {total() > 0 &&
                 <>
-                  <ul class="ztr-comment-replies-info-items" classList={{selected: isThreadCollapsed()}} onClick={() => setThreadCollapsed(!isThreadCollapsed())}>
+                  <ul class="ztr-comment-replies-info-items" classList={{selected: isThreadCollapsed()}}
+                    onClick={() => {
+                      setThreadCollapseIsClicked(true);
+                      setThreadCollapsed(!isThreadCollapsed());
+                    }}>
                     <li><span>{isThreadCollapsed() ? upArrow() : downArrow()}</span></li>
                     {isThreadCollapsed() && <li>{total()} repl{total() > 1 ? 'ies' : 'y'}</li>}
                   </ul>
