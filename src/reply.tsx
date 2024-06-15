@@ -96,6 +96,11 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
       signer = signersStore.anonymous;*/
     }
 
+    if (store.onLogin && await store.onLogin() && signer?.pk !== signersStore.active?.pk) {
+      console.log('current user has changed');
+      return;
+    }
+
     if (!signer?.signEvent) {
       onError('Error: User has no signer!');
       return;

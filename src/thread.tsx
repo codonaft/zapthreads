@@ -41,8 +41,15 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
               .map(reactionEvents => sortByDate(reactionEvents)[0]);
           };
 
-          const getSigner = () => {
+          const getSigner = async () => {
+            if (store.onLogin) {
+              const acceptedLogin = await store.onLogin();
+              if (!acceptedLogin) {
+                return;
+              }
+            }
             if (!signersStore.active) {
+              console.error('Error: active signer is not set!');
               return;
             }
             const signer: EventSigner = signersStore.active!;
@@ -61,20 +68,18 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
                 .reduce((sum, i) => sum + i, 0);
               setVotesCount(newVoteCount);
 
-              const signer = getSigner();
+              const signer = signersStore.active;
               const kind: VoteKind = (signer && votes.filter(r => r.pk === signer!.pk).map(r => voteKind(r))[0]) || 0;
               setCurrentUserVote(kind);
             });
           });
 
           const toggleVote = async (reaction: VoteKind, note: NoteEvent) => {
-            if (!getSigner()) {
-              const acceptedLogin = store.onLogin && await store.onLogin();
-              if (!acceptedLogin) {
-                return;
-              }
+            const s = await getSigner();
+            if (!s) {
+              return;
             }
-            const signer = getSigner()!;
+            const signer = s!;
             const latestVote = currentUserVote();
             const newVote = latestVote === reaction ? 0 : reaction;
 
