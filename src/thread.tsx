@@ -177,7 +177,7 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           const loggedInUser = props.loggedInUser;
           const countedChildren = createMemo(() => countChildren(event(), loggedInUser()));
           const total = () => countedChildren().total;
-          const commentedByCurrentUser = createMemo(() => countedChildren().currentUser > 0);
+          const commentedByCurrentUser = () => loggedInUser()?.pk === event().pk || countedChildren().currentUser > 0;
 
           if (!event().parent) {
             createComputed(on([total, commentedByCurrentUser],
