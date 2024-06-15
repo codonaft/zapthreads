@@ -27,6 +27,7 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           const [isThreadCollapsed, setThreadCollapsed] = createSignal(false);
 
           const [votesCount, setVotesCount] = createSignal(0);
+          const [hasVotes, setHasVotes] = createSignal(false);
           const [currentUserVote, setCurrentUserVote] = createSignal(0);
           const currentNoteVotes = () => props.votes().filter(r => r.noteId === event().id);
           const currentNoteVotesDeduplicatedByPks = () => {
@@ -63,6 +64,8 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           createEffect(() => {
             batch(() => {
               const votes = currentNoteVotesDeduplicatedByPks();
+              setHasVotes(votes.length > 0);
+
               const newVoteCount = votes
                 .map(r => voteKind(r) as number)
                 .reduce((sum, i) => sum + i, 0);
@@ -250,7 +253,7 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
                     {currentUserVote() === 1 ? upvoteSelectedSvg() : upvoteSvg()}
                   </li>
                   <li class="ztr-comment-action-votes">
-                    <span>{votesCount() === 0 ? 'Vote' : votesCount()}</span>
+                    <span>{hasVotes() ? votesCount() : 'Vote'}</span>
                   </li>
                   <li class="ztr-comment-action-downvote" classList={{selected: currentUserVote() === -1}} onClick={() => toggleVote(-1, event())}>
                     {currentUserVote() === -1 ? downvoteSelectedSvg() : downvoteSvg()}
