@@ -1,7 +1,7 @@
 import { JSX, createComputed, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js";
 import { customElement } from 'solid-element';
 import style from './styles/index.css?raw';
-import { saveRelayLatestForFilter, updateProfiles, totalChildren, sortByDate, parseUrlPrefixes, parseContent, getRelayLatest as getRelayLatestForFilter, normalizeURL } from "./util/ui.ts";
+import { saveRelayLatestForFilter, updateProfiles, countChildren, sortByDate, parseUrlPrefixes, parseContent, getRelayLatest as getRelayLatestForFilter, normalizeURL } from "./util/ui.ts";
 import { nest } from "./util/nest.ts";
 import { store, pool, isDisableType, signersStore } from "./util/stores.ts";
 import { Thread, ellipsisSvg } from "./thread.tsx";
@@ -11,7 +11,7 @@ import { clear as clearCache, find, findAll, save, watchAll } from "./util/db.ts
 import { decode } from "nostr-tools/nip19";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { Filter } from "nostr-tools/filter";
-import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind } from "./util/models.ts";
+import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, Profile } from "./util/models.ts";
 import { SubCloser } from "nostr-tools";
 
 const ZapThreads = (props: { [key: string]: string; }) => {
@@ -274,6 +274,24 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     );
   }, { defer: true }));
 
+  // Logged in user is a computed property of the active signer
+  const [loggedInUser, setLoggedInUser] = createSignal<Profile>();
+  const profiles = store.profiles!;
+  createEffect(async () => {
+    if (signersStore.active) {
+      const pk = signersStore.active.pk;
+      let profile = profiles().find(p => p.pk === pk);
+      if (!profile) {
+        profile = { pk, l: 0, ts: 0 };
+        await save('profiles', profile);
+      }
+      setLoggedInUser(profile);
+      updateProfiles([pk], relays(), profiles());
+    } else {
+      setLoggedInUser();
+    }
+  });
+
   // Login external npub/nsec
   const npubOrNsec = () => props.user;
 
@@ -375,7 +393,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   });
 
   const commentsLength = () => {
-    return nestedEvents().reduce((acc, n) => acc + totalChildren(n), nestedEvents().length);
+    return nestedEvents().reduce((acc, n) => acc + countChildren(n).total, nestedEvents().length);
   };
 
   const reactions = watchAll(() => ['reactions']);
@@ -394,11 +412,11 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         </div>
       </>}
       {anchor().type !== 'error' && <>
-        {!store.disableFeatures!.includes('reply') && <RootComment />}
+        {!store.disableFeatures!.includes('reply') && <RootComment loggedInUser={loggedInUser} />}
         <h2 id="ztr-title">
           {commentsLength() > 0 && `${commentsLength()} comment${commentsLength() == 1 ? '' : 's'}`}
         </h2>
-        <Thread nestedEvents={nestedEvents} articles={articles} votes={votes} />
+        <Thread nestedEvents={nestedEvents} articles={articles} votes={votes} loggedInUser={loggedInUser} />
       </>}
     </div></>;
 };

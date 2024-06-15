@@ -1,5 +1,5 @@
 import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on } from "solid-js";
-import { currentTime, defaultPicture, parseContent, shortenEncodedId, sortByDate, svgWidth, timeAgo, totalChildren } from "./util/ui.ts";
+import { currentTime, defaultPicture, parseContent, shortenEncodedId, sortByDate, svgWidth, timeAgo, countChildren } from "./util/ui.ts";
 import { ReplyEditor } from "./reply.tsx";
 import { NestedNoteEvent } from "./util/nest.ts";
 import { noteEncode, npubEncode } from "nostr-tools/nip19";
@@ -10,7 +10,7 @@ import { EventSigner, signersStore, store } from "./util/stores.ts";
 import { NoteEvent, Profile, Pk, ReactionEvent, VoteKind, Eid, voteKind } from "./util/models.ts";
 import { remove } from "./util/db.ts";
 
-export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles: () => NoteEvent[]; votes: () => ReactionEvent[]; }) => {
+export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles: () => NoteEvent[]; votes: () => ReactionEvent[]; loggedInUser: () => Profile | undefined; }) => {
   const anchor = () => store.anchor!;
   const profiles = store.profiles!;
   const relays = () => store.relays!;
@@ -174,12 +174,15 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
 
           const action = () => event().k === 9802 ? 'highlight' : (isAnchorMentioned() ? 'mention' : 'comment');
 
-          const total = createMemo(() => totalChildren(event()));
+          const loggedInUser = props.loggedInUser;
+          const countedChildren = createMemo(() => countChildren(event(), loggedInUser()));
+          const total = () => countedChildren().total;
+          const commentedByCurrentUser = createMemo(() => countedChildren().currentUser > 0);
 
           if (!event().parent) {
-            const [autoCollapsed, setAutoCollapsed] = createSignal(false);
-            createComputed(on([total, autoCollapsed],
-              () => total() >= MIN_AUTO_COLLAPSED_COMMENTS && !autoCollapsed() && setAutoCollapsed(true) && setThreadCollapsed(true)));
+            createComputed(on([total, commentedByCurrentUser],
+              () => setThreadCollapsed(total() >= MIN_AUTO_COLLAPSED_COMMENTS && !commentedByCurrentUser())
+            ));
           }
 
           const isUnspecifiedVersion = () =>
@@ -273,7 +276,7 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
                 </Show>
               </ul>
               {isOpen() &&
-                <ReplyEditor replyTo={event().id} onDone={() => setOpen(false)} />}
+                <ReplyEditor replyTo={event().id} onDone={() => setOpen(false)} loggedInUser={loggedInUser} />}
             </div>
 
             <div class="ztr-comment-replies">
@@ -286,7 +289,7 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
                   </ul>
                 </>}
               </div>
-              {!isThreadCollapsed() && <Thread nestedEvents={() => event().children} articles={props.articles} votes={props.votes} />}
+              {!isThreadCollapsed() && <Thread nestedEvents={() => event().children} articles={props.articles} votes={props.votes} loggedInUser={loggedInUser} />}
             </div>
           </div>;
         }
