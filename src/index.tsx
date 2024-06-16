@@ -378,7 +378,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     return nestedEvents().reduce((acc, n) => acc + totalChildren(n), nestedEvents().length);
   };
 
-  const firstLevelCommentsLength = () => nestedEvents().filter(n => !n.parent).length;
+  const firstLevelComments = () => nestedEvents().filter(n => !n.parent).length;
 
   const reactions = watchAll(() => ['reactions']);
   const votes = () => reactions().filter(r => voteKind(r) !== 0);
@@ -400,7 +400,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         <h2 id="ztr-title">
           {commentsLength() > 0 && `${commentsLength()} comment${commentsLength() == 1 ? '' : 's'}`}
         </h2>
-        <Thread nestedEvents={nestedEvents} articles={articles} votes={votes} firstLevelCommentsLength={firstLevelCommentsLength} />
+        <Thread nestedEvents={nestedEvents} articles={articles} votes={votes} firstLevelComments={firstLevelComments} />
       </>}
     </div></>;
 };

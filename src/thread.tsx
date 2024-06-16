@@ -11,13 +11,14 @@ import { EventSigner, signersStore, store } from "./util/stores.ts";
 import { NoteEvent, Profile, Pk, ReactionEvent, VoteKind, Eid, voteKind } from "./util/models.ts";
 import { remove } from "./util/db.ts";
 
-export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles: () => NoteEvent[]; votes: () => ReactionEvent[]; firstLevelCommentsLength?: () => number; }) => {
+export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles: () => NoteEvent[]; votes: () => ReactionEvent[]; firstLevelComments?: () => number; }) => {
   const anchor = () => store.anchor!;
   const profiles = store.profiles!;
   const relays = () => store.relays!;
 
   const MIN_AUTO_COLLAPSED_THREADS = 3;
   const MIN_AUTO_COLLAPSED_COMMENTS = 5;
+  const AUTO_UNCOLLAPSE_THREADS_TIMEOUT_MS = 3000;
 
   return <div class="ztr-thread">
     <Index each={sortByDate(props.nestedEvents())}>
@@ -27,7 +28,7 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           const [isExpanded, setExpanded] = createSignal(false);
           const [overflowed, setOverflowed] = createSignal(false);
 
-          const [isThreadCollapsed, setThreadCollapsed] = createSignal(false);
+          const [isThreadCollapsed, setThreadCollapsed] = createSignal(!event().parent);
           const [frozenAutoThreadCollapse, setFreezeAutoThreadCollapse] = createSignal(false);
 
           let commentRepliesElement: HTMLDivElement | undefined;
@@ -185,20 +186,21 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           const action = () => event().k === 9802 ? 'highlight' : (isAnchorMentioned() ? 'mention' : 'comment');
 
           const total = createMemo(() => totalChildren(event()));
-          const firstLevelCommentsLength = () => props.firstLevelCommentsLength && props.firstLevelCommentsLength() || 0;
+          const firstLevelComments = () => props.firstLevelComments && props.firstLevelComments() || 0;
 
           if (!event().parent) {
-            createEffect(on([total, visible, firstLevelCommentsLength],
-              () => {
-                if (visible()) {
-                  setFreezeAutoThreadCollapse(true);
+            setTimeout(() => {
+              batch(() => {
+                if (!frozenAutoThreadCollapse()) {
+                  if (firstLevelComments() < MIN_AUTO_COLLAPSED_THREADS || total() < MIN_AUTO_COLLAPSED_COMMENTS) {
+                    setFreezeAutoThreadCollapse(true);
+                    setThreadCollapsed(false);
+                  }
                 }
-                if (!frozenAutoThreadCollapse() && firstLevelCommentsLength() >= MIN_AUTO_COLLAPSED_THREADS && total() >= MIN_AUTO_COLLAPSED_COMMENTS) {
-                  setThreadCollapsed(true);
-                  setFreezeAutoThreadCollapse(true);
-                }
-              }
-            ));
+              })
+            }, AUTO_UNCOLLAPSE_THREADS_TIMEOUT_MS);
+
+            createEffect(on([visible], () => visible() && setFreezeAutoThreadCollapse(true)));
           }
 
           const isUnspecifiedVersion = () =>
@@ -300,10 +302,7 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
                 {total() > 0 &&
                 <>
                   <ul class="ztr-comment-replies-info-items" classList={{selected: isThreadCollapsed()}}
-                    onClick={() => {
-                      setFreezeAutoThreadCollapse(true);
-                      setThreadCollapsed(!isThreadCollapsed());
-                    }}>
+                    onClick={() => setThreadCollapsed(!isThreadCollapsed())}>
                     <li><span>{isThreadCollapsed() ? upArrow() : downArrow()}</span></li>
                     {isThreadCollapsed() && <li>{total()} repl{total() > 1 ? 'ies' : 'y'}</li>}
                   </ul>
