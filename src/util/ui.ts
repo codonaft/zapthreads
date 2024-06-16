@@ -282,14 +282,10 @@ export const satsAbbrev = (sats: number): string => {
 
 export const currentTime = () => Math.round(Date.now() / 1000);
 
-export const countChildren = (event: NestedNoteEvent, profile?: Profile): { total: number; currentUser: number; } => {
-  return event.children.reduce(
-    (acc, c) => {
-      const { total, currentUser } = countChildren(c, profile);
-      return {total: acc.total + total, currentUser: acc.currentUser + currentUser};
-    },
-    {total: event.children.length, currentUser: event.children.filter(e => profile?.pk === e.pk).length}
-  );
+export const totalChildren = (event: NestedNoteEvent): number => {
+  return event.children.reduce<number>((acc, c) => {
+    return acc + totalChildren(c);
+  }, event.children.length);
 };
 
 const removeSlashesRegex = /\/+$/;

@@ -1,5 +1,5 @@
 import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on } from "solid-js";
-import { currentTime, defaultPicture, parseContent, shortenEncodedId, sortByDate, svgWidth, timeAgo, countChildren } from "./util/ui.ts";
+import { currentTime, defaultPicture, parseContent, shortenEncodedId, sortByDate, svgWidth, timeAgo, totalChildren } from "./util/ui.ts";
 import { ReplyEditor } from "./reply.tsx";
 import { NestedNoteEvent } from "./util/nest.ts";
 import { noteEncode, npubEncode } from "nostr-tools/nip19";
@@ -10,13 +10,7 @@ import { EventSigner, signersStore, store } from "./util/stores.ts";
 import { NoteEvent, Profile, Pk, ReactionEvent, VoteKind, Eid, voteKind } from "./util/models.ts";
 import { remove } from "./util/db.ts";
 
-export const Thread = (props: {
-  nestedEvents: () => NestedNoteEvent[];
-  articles: () => NoteEvent[];
-  votes: () => ReactionEvent[];
-  loggedInUser: () => Profile | undefined;
-  firstLevelCommentsLength?: () => number;
-}) => {
+export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles: () => NoteEvent[]; votes: () => ReactionEvent[]; firstLevelCommentsLength?: () => number; }) => {
   const anchor = () => store.anchor!;
   const profiles = store.profiles!;
   const relays = () => store.relays!;
@@ -185,9 +179,7 @@ export const Thread = (props: {
 
           const action = () => event().k === 9802 ? 'highlight' : (isAnchorMentioned() ? 'mention' : 'comment');
 
-          const loggedInUser = props.loggedInUser;
-          const countedChildren = createMemo(() => countChildren(event(), loggedInUser())); // TODO: revert?
-          const total = () => countedChildren().total;
+          const total = createMemo(() => totalChildren(event()));
           const firstLevelCommentsLength = () => props.firstLevelCommentsLength && props.firstLevelCommentsLength() || 0;
 
           if (!event().parent) {
@@ -292,7 +284,7 @@ export const Thread = (props: {
                 </Show>
               </ul>
               {isOpen() &&
-                <ReplyEditor replyTo={event().id} onDone={() => setOpen(false)} loggedInUser={loggedInUser} />}
+                <ReplyEditor replyTo={event().id} onDone={() => setOpen(false)} />}
             </div>
 
             <div class="ztr-comment-replies">
@@ -309,7 +301,7 @@ export const Thread = (props: {
                   </ul>
                 </>}
               </div>
-              {!isThreadCollapsed() && <Thread nestedEvents={() => event().children} articles={props.articles} votes={props.votes} loggedInUser={loggedInUser} />}
+              {!isThreadCollapsed() && <Thread nestedEvents={() => event().children} articles={props.articles} votes={props.votes} />}
             </div>
           </div>;
         }

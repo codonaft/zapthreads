@@ -11,14 +11,15 @@ import { decode, npubEncode } from "nostr-tools/nip19";
 import { Relay } from "nostr-tools/relay";
 import { normalizeURL } from "nostr-tools/utils";
 
-export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; loggedInUser: () => Profile | undefined }) => {
+export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => {
   const [comment, setComment] = createSignal('');
   const [loading, setLoading] = createSignal(false);
+  const [loggedInUser, setLoggedInUser] = createSignal<Profile>();
   const [errorMessage, setErrorMessage] = createSignal('');
 
   const anchor = () => store.anchor!;
+  const profiles = store.profiles!;
   const relays = () => store.relays!;
-  const loggedInUser = props.loggedInUser;
 
   // Sessions
 
@@ -42,6 +43,22 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; logged
     setErrorMessage(''); // clear error
     signersStore.active = signersStore.internal;
   };
+
+  // Logged in user is a computed property of the active signer
+  createEffect(async () => {
+    if (signersStore.active) {
+      const pk = signersStore.active.pk;
+      let profile = profiles().find(p => p.pk === pk);
+      if (!profile) {
+        profile = { pk, l: 0, ts: 0 };
+        await save('profiles', profile);
+      }
+      setLoggedInUser(profile);
+      updateProfiles([pk], relays(), profiles());
+    } else {
+      setLoggedInUser();
+    }
+  });
 
   // Publishing
 
@@ -246,7 +263,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; logged
   </div>;
 };
 
-export const RootComment = (props: { loggedInUser: () => Profile | undefined; }) => {
+export const RootComment = () => {
   const anchor = () => store.anchor!;
 
   const zapsAggregate = watch(() => ['aggregates', IDBKeyRange.only([anchor().value, 9735])]);
@@ -270,7 +287,7 @@ export const RootComment = (props: { loggedInUser: () => Profile | undefined; })
           </li>
         </Show>
       </ul>
-      <ReplyEditor loggedInUser={props.loggedInUser} />
+      <ReplyEditor />
     </div>
   </div>;
 };
