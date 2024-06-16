@@ -18,7 +18,23 @@ const db = async () => {
     return;
   }
   try {
-    return __db ||= await openDB<ZapthreadsSchema>('zapthreads', 2, { upgrade });
+    if (!__db) {
+      __db = await openDB<ZapthreadsSchema>('zapthreads', 2, { upgrade });
+
+      __db.addEventListener('close', (event) => {
+        console.log('closed database');
+        location.reload();
+      }, {'once': true});
+
+      window.addEventListener('storage', (event) => {
+        if (event.key === null) {
+          console.log('cleared storage');
+          location.reload();
+        }
+      }, {'once': true});
+    }
+
+    return __db;
   }
   catch (e) {
     // IndexedDB is not supported, do not attempt to open again and use in-memory database
