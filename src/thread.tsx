@@ -186,14 +186,18 @@ export const Thread = (props: {
           const action = () => event().k === 9802 ? 'highlight' : (isAnchorMentioned() ? 'mention' : 'comment');
 
           const loggedInUser = props.loggedInUser;
-          const countedChildren = createMemo(() => countChildren(event(), loggedInUser()));
+          const countedChildren = createMemo(() => countChildren(event(), loggedInUser())); // TODO: revert?
           const total = () => countedChildren().total;
-          const commentedByCurrentUser = () => loggedInUser()?.pk === event().pk || countedChildren().currentUser > 0;
           const firstLevelCommentsLength = () => props.firstLevelCommentsLength && props.firstLevelCommentsLength() || 0;
 
           if (!event().parent) {
-            createComputed(on([total, commentedByCurrentUser],
-              () => setThreadCollapsed(!threadCollapseIsClicked() && firstLevelCommentsLength() >= MIN_AUTO_COLLAPSED_THREADS && total() >= MIN_AUTO_COLLAPSED_COMMENTS && !commentedByCurrentUser())
+            createComputed(on([total],
+              () => {
+                setThreadCollapsed(!threadCollapseIsClicked() && firstLevelCommentsLength() >= MIN_AUTO_COLLAPSED_THREADS && total() >= MIN_AUTO_COLLAPSED_COMMENTS);
+                if (!isThreadCollapsed()) {
+                  setThreadCollapseIsClicked(true);
+                }
+              }
             ));
           }
 
