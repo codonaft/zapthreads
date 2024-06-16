@@ -1,4 +1,5 @@
 import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on } from "solid-js";
+import { createVisibilityObserver } from "@solid-primitives/intersection-observer";
 import { currentTime, defaultPicture, parseContent, shortenEncodedId, sortByDate, svgWidth, timeAgo, totalChildren } from "./util/ui.ts";
 import { ReplyEditor } from "./reply.tsx";
 import { NestedNoteEvent } from "./util/nest.ts";
@@ -25,8 +26,12 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           const [isOpen, setOpen] = createSignal(false);
           const [isExpanded, setExpanded] = createSignal(false);
           const [overflowed, setOverflowed] = createSignal(false);
+
           const [isThreadCollapsed, setThreadCollapsed] = createSignal(false);
-          const [threadCollapseIsClicked, setThreadCollapseIsClicked] = createSignal(false);
+          const [frozenAutoThreadCollapse, setFreezeAutoThreadCollapse] = createSignal(false);
+
+          let commentRepliesElement: HTMLDivElement | undefined;
+          const visible = createVisibilityObserver({ threshold: 0.0 })(() => commentRepliesElement);
 
           const [votesCount, setVotesCount] = createSignal(0);
           const [hasVotes, setHasVotes] = createSignal(false);
@@ -183,11 +188,14 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           const firstLevelCommentsLength = () => props.firstLevelCommentsLength && props.firstLevelCommentsLength() || 0;
 
           if (!event().parent) {
-            createComputed(on([total],
+            createEffect(on([total, visible, firstLevelCommentsLength],
               () => {
-                setThreadCollapsed(!threadCollapseIsClicked() && firstLevelCommentsLength() >= MIN_AUTO_COLLAPSED_THREADS && total() >= MIN_AUTO_COLLAPSED_COMMENTS);
-                if (!isThreadCollapsed()) {
-                  setThreadCollapseIsClicked(true);
+                if (visible()) {
+                  setFreezeAutoThreadCollapse(true);
+                }
+                if (!frozenAutoThreadCollapse() && firstLevelCommentsLength() >= MIN_AUTO_COLLAPSED_THREADS && total() >= MIN_AUTO_COLLAPSED_COMMENTS) {
+                  setThreadCollapsed(true);
+                  setFreezeAutoThreadCollapse(true);
                 }
               }
             ));
@@ -287,13 +295,13 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
                 <ReplyEditor replyTo={event().id} onDone={() => setOpen(false)} />}
             </div>
 
-            <div class="ztr-comment-replies">
+            <div class="ztr-comment-replies" ref={commentRepliesElement}>
               <div class="ztr-comment-replies-info-actions">
                 {total() > 0 &&
                 <>
                   <ul class="ztr-comment-replies-info-items" classList={{selected: isThreadCollapsed()}}
                     onClick={() => {
-                      setThreadCollapseIsClicked(true);
+                      setFreezeAutoThreadCollapse(true);
                       setThreadCollapsed(!isThreadCollapsed());
                     }}>
                     <li><span>{isThreadCollapsed() ? upArrow() : downArrow()}</span></li>
