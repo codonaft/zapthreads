@@ -497,7 +497,7 @@ li.ztr-comment-action-votes {
 
 /* Dark mode defaults */
 
-@media (prefers-color-scheme: dark) {
+/* @media (prefers-color-scheme: dark) { */
   .ztr-spinner .path {
     stroke: var(--ztr-text-color, #DEDEDE);
   }
@@ -527,4 +527,4 @@ li.ztr-comment-action-votes {
   .ztr-comment-action-reply:hover span {
     color: #0288d1;
   }
-}
+/* } */
