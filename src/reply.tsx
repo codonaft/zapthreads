@@ -1,4 +1,5 @@
 import { currentTime, defaultPicture, generateTags, satsAbbrev, shortenEncodedId, updateProfiles } from "./util/ui.ts";
+import { publishEvent } from "./util/network.ts";
 import { Show, createEffect, createSignal } from "solid-js";
 import { UnsignedEvent, Event } from "nostr-tools/core";
 import { EventSigner, pool, signersStore, store } from "./util/stores.ts";
@@ -133,6 +134,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
     if (props.replyTo) {
       const replyEvent = await find('events', IDBKeyRange.only(props.replyTo));
       if (replyEvent) {
+        console.log('publishing reply');
         // If it is a reply, it must have a root
         unsignedEvent.tags.push(['e', replyEvent.ro!, '', 'root']);
         // If the user is not replying to themselves, add p to notify
@@ -169,6 +171,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
         if (store.disableFeatures!.includes('publish')) {
           console.log('Publishing root event disabled', rootEvent);
         } else {
+          console.log('publishing root event');
           pool.publish(relays(), rootEvent);
         }
         // Update filter to this rootEvent
@@ -195,27 +198,18 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
       // Simulate publishing
       setTimeout(() => onSuccess(event), 1000);
     } else {
-      const failures = [];
-      for (const relayUrl of relays()) {
-        try {
-          const relay = await Relay.connect(relayUrl);
-          await relay.publish(event);
-        } catch (e) {
-          console.error(e);
-          failures.push(relayUrl);
-        }
-      }
+      console.log('publishing something else');
+      const rs = relays();
+      const [ok, failures] = await publishEvent(event, relays(), 7000);
 
-      if (failures.length === relays().length) {
+      if (failures === rs.length) {
         onError('Error: Your comment was not published to any relay');
       } else {
-        const msg = `Published to ${failures.length}/${relays().length} relays (see console for more info)`;
-        const notice = failures.length > 0 ? msg : undefined;
+        const msg = `Published to ${ok}/${rs.length} relays (see console for more info)`;
+        const notice = failures > 0 ? msg : undefined;
         onSuccess(event, notice);
       }
-      // clear up failure log
-      failures.length = 0;
-    };
+    }
   };
 
   // Only autofocus if 

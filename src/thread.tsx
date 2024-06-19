@@ -1,6 +1,7 @@
 import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on } from "solid-js";
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer";
 import { currentTime, defaultPicture, parseContent, shortenEncodedId, sortByDate, svgWidth, timeAgo, totalChildren } from "./util/ui.ts";
+import { publishEvent } from "./util/network.ts";
 import { ReplyEditor } from "./reply.tsx";
 import { NestedNoteEvent } from "./util/nest.ts";
 import { noteEncode, npubEncode } from "nostr-tools/nip19";
@@ -139,14 +140,7 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
               const signature = await signer.signEvent!(unsignedEvent);
               const event: Event = { id, ...unsignedEvent, ...signature };
               console.log(JSON.stringify(event, null, 2));
-
-              const results = await Promise.allSettled(relays().map(async (relayUrl) => {
-                const relay = await Relay.connect(relayUrl);
-                await relay.publish(event);
-              }));
-              const ok = results.filter(i => i.status === 'fulfilled').length;
-              const failures = results.length - ok;
-              console.log(`signAndPublishEvent ok=${ok} failed=${failures}`);
+              const [ok, failures] = await publishEvent(event, relays(), 7000);
               return ok > 0;
             }
 
