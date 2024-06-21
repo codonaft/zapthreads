@@ -140,7 +140,7 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
               const signature = await signer.signEvent!(unsignedEvent);
               const event: Event = { id, ...unsignedEvent, ...signature };
               console.log(JSON.stringify(event, null, 2));
-              const [ok, failures] = await publishEvent(event, relays(), 7000);
+              const [ok, failures] = await publishEvent(event, relays());
               return ok > 0;
             }
 

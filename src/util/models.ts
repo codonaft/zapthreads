@@ -1,5 +1,6 @@
 import { DBSchema, IDBPDatabase, StoreNames } from "idb";
 import { parse } from "nostr-tools/nip10";
+import { RelayInformation } from "nostr-tools/nip11";
 import { UnsignedEvent } from "nostr-tools/pure";
 
 // models
@@ -66,6 +67,13 @@ export type Relay = {
   l: number; // latest result
 };
 
+export type RelayInfo = {
+  name: string;
+  expiresAt: number;
+  online: boolean;
+  info?: RelayInformation;
+};
+
 // DB schema
 
 export interface ZapthreadsSchema extends DBSchema {
@@ -105,6 +113,13 @@ export interface ZapthreadsSchema extends DBSchema {
       'a': string;
     };
   };
+  relayInfos: {
+    key: string;
+    value: RelayInfo;
+    indexes: {
+      'by-name': string;
+    };
+  };
 }
 
 export const indices: { [key in StoreNames<ZapthreadsSchema>]: any } = {
@@ -112,7 +127,8 @@ export const indices: { [key in StoreNames<ZapthreadsSchema>]: any } = {
   'reactions': 'eid',
   'aggregates': ['eid', 'k'],
   'profiles': ['pk'],
-  'relays': ['n', 'a']
+  'relays': ['n', 'a'],
+  'relayInfos': 'name',
 };
 
 export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion: number) => {
@@ -138,6 +154,9 @@ export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion
 
   const relays = db.createObjectStore('relays', { keyPath: indices['relays'] });
   relays.createIndex('a', 'a');
+
+  const relayInfos = db.createObjectStore('relayInfos', { keyPath: indices['relayInfos'] });
+  relayInfos.createIndex('by-name', 'name');
 };
 
 // util

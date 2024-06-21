@@ -199,13 +199,12 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
       setTimeout(() => onSuccess(event), 1000);
     } else {
       console.log('publishing something else');
-      const rs = relays();
-      const [ok, failures] = await publishEvent(event, relays(), 7000);
-
-      if (failures === rs.length) {
+      const _relays = relays();
+      const [ok, failures] = await publishEvent(event, _relays);
+      if (ok === 0) {
         onError('Error: Your comment was not published to any relay');
       } else {
-        const msg = `Published to ${ok}/${rs.length} relays (see console for more info)`;
+        const msg = `Published to ${ok}/${_relays.length} relays (see console for more info)`;
         const notice = failures > 0 ? msg : undefined;
         onSuccess(event, notice);
       }
