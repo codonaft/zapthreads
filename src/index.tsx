@@ -12,7 +12,7 @@ import { decode } from "nostr-tools/nip19";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { Filter } from "nostr-tools/filter";
 import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind } from "./util/models.ts";
-import { SubCloser } from "nostr-tools";
+import { SubCloser } from "nostr-tools/pool";
 
 const ZapThreads = (props: { [key: string]: string; }) => {
   createComputed(() => {
