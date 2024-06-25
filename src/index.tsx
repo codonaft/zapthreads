@@ -1,5 +1,6 @@
 import { JSX, createComputed, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js";
 import { customElement } from 'solid-element';
+import { createVisibilityObserver } from "@solid-primitives/intersection-observer";
 import style from './styles/index.css?raw';
 import { saveRelayLatestForFilter, updateProfiles, totalChildren, sortByDate, parseUrlPrefixes, parseContent, getRelayLatest as getRelayLatestForFilter, normalizeURL } from "./util/ui.ts";
 import { nest } from "./util/nest.ts";
@@ -361,19 +362,30 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   });
   const events = () => eventsWatcher()();
 
-  // Filter -> local events
   const nestedEvents = createMemo(() => {
-    if (store.writingReplies === 0) {
-      // calculate only once root event IDs are ready
-      if (store.rootEventIds && store.rootEventIds.length) {
-        store.visibleNestedEvents = nest(events()).filter(e => {
-          // remove all highlights without children (we only want those that have comments on them)
-          return !(e.k === 9802 && e.children.length === 0);
-        });
-      }
+    if (store.rootEventIds && store.rootEventIds.length) {
+      return nest(events()).filter(e => {
+        // remove all highlights without children (we only want those that have comments on them)
+        return !(e.k === 9802 && e.children.length === 0);
+      });
     }
-    return store.visibleNestedEvents;
+    return [];
   });
+
+  // Filter -> local events
+  const topNestedEvents = () => {
+    const userStartedReadingComments = store.userStartedReadingComments;
+
+    // Put all new comments on top until user starts to read the comments section.
+    // Then put all new messages (besides our own) to the bottom, to avoid sudden unwanted shifts of contents.
+    const topNestedEvents = nestedEvents().filter(e => !userStartedReadingComments || signersStore.active?.pk == e.pk || store.topRootEventIds.has(e.id));
+    topNestedEvents.forEach(e => store.topRootEventIds.add(e.id));
+    return topNestedEvents;
+  };
+
+  const bottomNestedEvents = () => {
+    return nestedEvents().filter(e => !store.topRootEventIds.has(e.id));
+  };
 
   const commentsLength = () => {
     return nestedEvents().reduce((acc, n) => acc + totalChildren(n), nestedEvents().length);
@@ -384,8 +396,25 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   const reactions = watchAll(() => ['reactions']);
   const votes = () => reactions().filter(r => voteKind(r) !== 0);
 
+  let rootElement: HTMLDivElement | undefined;
+  const visible = createVisibilityObserver({ threshold: 0.0 })(() => rootElement);
+  let userStartedReadingCommentsTimer: any;
+
+  createEffect(on([visible, firstLevelComments], () => {
+    if (!store.userStartedReadingComments && visible() && firstLevelComments() > 0) {
+      store.userObservedComments = true;
+      let userStartedReadingCommentsTimer = setTimeout(() => {
+        store.userStartedReadingComments = true;
+      }, 3000);
+    }
+  }));
+
+  onCleanup(() => {
+    clearTimeout(userStartedReadingCommentsTimer);
+  });
+
   return <>
-    <div id="ztr-root">
+    <div ref={rootElement} id="ztr-root">
       <style>{style}</style>
       {content() && <div id="ztr-content" innerHTML={content()}></div>}
       {anchor().type === 'error' && <>
@@ -401,7 +430,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         <h2 id="ztr-title">
           {commentsLength() > 0 && `${commentsLength()} comment${commentsLength() == 1 ? '' : 's'}`}
         </h2>
-        <Thread nestedEvents={nestedEvents} articles={articles} votes={votes} firstLevelComments={firstLevelComments} />
+        <Thread topNestedEvents={topNestedEvents} bottomNestedEvents={bottomNestedEvents} articles={articles} votes={votes} firstLevelComments={firstLevelComments} />
       </>}
     </div></>;
 };

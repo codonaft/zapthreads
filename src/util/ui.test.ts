@@ -1,3 +1,4 @@
+import { ReactiveSet } from "@solid-primitives/set";
 import { UnsignedEvent } from "nostr-tools/pure";
 import { parseContent, parseUrlPrefixes } from "./ui.ts";
 import { createMutable } from "solid-js/store";
@@ -10,9 +11,11 @@ describe("ui utils", () => {
       filter: {},
       profiles: () => [],
       rootEventIds: [],
-      visibleNestedEvents: [],
-      writingReplies: 0,
+      topRootEventIds: new Set,
+      userObservedComments: false,
+      userStartedReadingComments: false,
       threadCollapsed: new Map,
+      messageExpanded: new ReactiveSet,
       disableFeatures: [],
       urlPrefixes: parseUrlPrefixes('naddr:nostr.com/,')
     });

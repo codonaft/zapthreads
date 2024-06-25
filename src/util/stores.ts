@@ -1,3 +1,4 @@
+import { ReactiveSet } from "@solid-primitives/set";
 import { UnsignedEvent } from "nostr-tools/pure";
 import { SimplePool } from "nostr-tools/pool";
 import { Filter } from "nostr-tools/filter";
@@ -11,9 +12,11 @@ export const pool = new SimplePool();
 
 export const store = createMutable<PreferencesStore>({
   rootEventIds: [],
-  visibleNestedEvents: [],
-  writingReplies: 0,
+  topRootEventIds: new Set,
+  userObservedComments: false,
+  userStartedReadingComments: false,
   threadCollapsed: new Map,
+  messageExpanded: new ReactiveSet,
   filter: {},
   profiles: () => [],
 });
@@ -44,9 +47,11 @@ export type PreferencesStore = {
   relays?: string[]; // prop
   version?: string;  // derived from version prop
   rootEventIds: string[];  // derived from anchor prop
-  visibleNestedEvents: NestedNoteEvent[],
-  writingReplies: number,
+  topRootEventIds: Set<Eid>,
+  userObservedComments: boolean,
+  userStartedReadingComments: boolean,
   threadCollapsed: Map<Eid, boolean>,
+  messageExpanded: ReactiveSet<Eid>,
   filter: Filter;  // derived from anchor prop
   externalAuthor?: string; // prop, mostly used with http anchor type
   disableFeatures?: DisableType[]; // prop
