@@ -10,6 +10,8 @@ describe("ui utils", () => {
       filter: {},
       profiles: () => [],
       rootEventIds: [],
+      visibleNestedEvents: [],
+      writingReplies: 0,
       disableFeatures: [],
       urlPrefixes: parseUrlPrefixes('naddr:nostr.com/,')
     });

@@ -363,15 +363,16 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
   // Filter -> local events
   const nestedEvents = createMemo(() => {
-    // calculate only once root event IDs are ready
-    if (store.rootEventIds && store.rootEventIds.length) {
-      const nested = nest(events());
-      return nested.filter(e => {
-        // remove all highlights without children (we only want those that have comments on them)
-        return !(e.k === 9802 && e.children.length === 0);
-      });
+    if (store.writingReplies === 0) {
+      // calculate only once root event IDs are ready
+      if (store.rootEventIds && store.rootEventIds.length) {
+        store.visibleNestedEvents = nest(events()).filter(e => {
+          // remove all highlights without children (we only want those that have comments on them)
+          return !(e.k === 9802 && e.children.length === 0);
+        });
+      }
     }
-    return [];
+    return store.visibleNestedEvents;
   });
 
   const commentsLength = () => {

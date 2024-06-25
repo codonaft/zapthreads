@@ -3,12 +3,16 @@ import { SimplePool } from "nostr-tools/pool";
 import { Filter } from "nostr-tools/filter";
 import { Profile } from "./models.ts";
 import { createMutable } from "solid-js/store";
+import { Eid } from "./models.ts";
+import { NestedNoteEvent } from "./nest.ts";
 
 // Global data (for now)
 export const pool = new SimplePool();
 
 export const store = createMutable<PreferencesStore>({
   rootEventIds: [],
+  visibleNestedEvents: [],
+  writingReplies: 0,
   filter: {},
   profiles: () => [],
 });
@@ -39,6 +43,8 @@ export type PreferencesStore = {
   relays?: string[]; // prop
   version?: string;  // derived from version prop
   rootEventIds: string[];  // derived from anchor prop
+  visibleNestedEvents: NestedNoteEvent[],
+  writingReplies: number,
   filter: Filter;  // derived from anchor prop
   externalAuthor?: string; // prop, mostly used with http anchor type
   disableFeatures?: DisableType[]; // prop

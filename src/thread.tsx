@@ -281,14 +281,21 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
                   </li>
                 </Show> */}
                 <Show when={!store.disableFeatures!.includes('reply')}>
-                  <li class="ztr-comment-action-reply" onClick={() => setOpen(!isOpen())}>
+                  <li class="ztr-comment-action-reply" onClick={() => {
+                    const open = !isOpen();
+                    setOpen(open);
+                    store.writingReplies += open ? 1 : -1;
+                  }}>
                     {replySvg()}
                     <span>{isOpen() ? 'Cancel' : 'Reply'}</span>
                   </li>
                 </Show>
               </ul>
               {isOpen() &&
-                <ReplyEditor replyTo={event().id} onDone={() => setOpen(false)} />}
+                <ReplyEditor replyTo={event().id} onDone={() => {
+                  setOpen(false);
+                  store.writingReplies--;
+                }} />}
             </div>
 
             <div class="ztr-comment-replies" ref={commentRepliesElement}>
