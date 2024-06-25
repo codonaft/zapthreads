@@ -29,8 +29,13 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           const [isExpanded, setExpanded] = createSignal(false);
           const [overflowed, setOverflowed] = createSignal(false);
 
-          const [isThreadCollapsed, setThreadCollapsed] = createSignal(!event().parent);
-          const [frozenAutoThreadCollapse, setFreezeAutoThreadCollapse] = createSignal(false);
+          const isRootEvent = !event().parent;
+          const [isThreadCollapsed, setThreadCollapsedInternal] = createSignal(isRootEvent);
+          const setThreadCollapsed = (collapsed: boolean) => {
+            setThreadCollapsedInternal(collapsed);
+            store.threadCollapsed.set(event().id, collapsed);
+          };
+          const updateThreadCollapsed = () => setThreadCollapsed(firstLevelComments() >= MIN_AUTO_COLLAPSED_THREADS || total() >= MIN_AUTO_COLLAPSED_COMMENTS);
 
           let commentRepliesElement: HTMLDivElement | undefined;
           const visible = createVisibilityObserver({ threshold: 0.0 })(() => commentRepliesElement);
@@ -182,20 +187,23 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
           const total = createMemo(() => totalChildren(event()));
           const firstLevelComments = () => props.firstLevelComments && props.firstLevelComments() || 0;
 
-          if (!event().parent) {
-            setTimeout(() => {
-              batch(() => {
-                if (!frozenAutoThreadCollapse()) {
-                  if (firstLevelComments() < MIN_AUTO_COLLAPSED_THREADS || total() < MIN_AUTO_COLLAPSED_COMMENTS) {
-                    setFreezeAutoThreadCollapse(true);
-                    setThreadCollapsed(false);
+          let threadCollapseTimer: any;
+          createEffect(on([visible, firstLevelComments, total], () => {
+            const collapsed = store.threadCollapsed.get(event().id);
+            if (collapsed !== undefined) {
+              setThreadCollapsed(collapsed);
+            } else if (isRootEvent) {
+              if (visible()) {
+                updateThreadCollapsed();
+              } else if (!threadCollapseTimer) {
+                threadCollapseTimer = setTimeout(() => {
+                  if (!visible() && !store.threadCollapsed.has(event().id)) {
+                    updateThreadCollapsed();
                   }
-                }
-              })
-            }, AUTO_UNCOLLAPSE_THREADS_TIMEOUT_MS);
-
-            createEffect(on([visible], () => visible() && setFreezeAutoThreadCollapse(true)));
-          }
+                }, AUTO_UNCOLLAPSE_THREADS_TIMEOUT_MS);
+              }
+            }
+          }));
 
           const isUnspecifiedVersion = () =>
             // if it does not have a parent or rootId
@@ -215,7 +223,10 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
             // but does not match the current version
             && store.version && store.version !== event().ro;
 
-          onCleanup(() => clearInterval(timer));
+          onCleanup(() => {
+            clearInterval(timer);
+            clearTimeout(threadCollapseTimer);
+          });
 
           const parsedContent = createMemo(() => {
             const result = parseContent(event(), store, props.articles());
@@ -285,6 +296,9 @@ export const Thread = (props: { nestedEvents: () => NestedNoteEvent[]; articles:
                     const open = !isOpen();
                     setOpen(open);
                     store.writingReplies += open ? 1 : -1;
+                    if (total() === 0) {
+                      setThreadCollapsed(false);
+                    }
                   }}>
                     {replySvg()}
                     <span>{isOpen() ? 'Cancel' : 'Reply'}</span>

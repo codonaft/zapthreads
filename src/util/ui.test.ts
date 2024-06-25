@@ -12,6 +12,7 @@ describe("ui utils", () => {
       rootEventIds: [],
       visibleNestedEvents: [],
       writingReplies: 0,
+      threadCollapsed: new Map,
       disableFeatures: [],
       urlPrefixes: parseUrlPrefixes('naddr:nostr.com/,')
     });

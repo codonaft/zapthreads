@@ -13,6 +13,7 @@ export const store = createMutable<PreferencesStore>({
   rootEventIds: [],
   visibleNestedEvents: [],
   writingReplies: 0,
+  threadCollapsed: new Map,
   filter: {},
   profiles: () => [],
 });
@@ -45,6 +46,7 @@ export type PreferencesStore = {
   rootEventIds: string[];  // derived from anchor prop
   visibleNestedEvents: NestedNoteEvent[],
   writingReplies: number,
+  threadCollapsed: Map<Eid, boolean>,
   filter: Filter;  // derived from anchor prop
   externalAuthor?: string; // prop, mostly used with http anchor type
   disableFeatures?: DisableType[]; // prop
