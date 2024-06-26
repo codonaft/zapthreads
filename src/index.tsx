@@ -97,10 +97,9 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       }));
 
     const onlineRelays = sortedRelays.filter(([name, options]) => possiblyOnline(name)).slice(0, MAX_RELAYS);
-    const readRelays: string[] = onlineRelays.filter(([name, options]) => options.read).map(([r, _]) => r);
-    const writeRelays: string[] = onlineRelays.filter(([name, options]) => options.write).map(([r, _]) => r); // TODO
-
-    if (!store.relays || JSON.stringify(store.relays) !== JSON.stringify(readRelays)) {
+    const readRelays = onlineRelays.filter(([name, options]) => options.read).map(([r, _]) => r);
+    store.writeRelays = onlineRelays.filter(([name, options]) => options.write).map(([r, _]) => r);
+    if (JSON.stringify(store.relays) !== JSON.stringify(readRelays)) {
       console.log(`detected read relays changes ${store.relays} => ${readRelays}`);
       batch(() => {
         store.relays = readRelays;
@@ -110,7 +109,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   }));
 
   const anchor = () => store.anchor!;
-  const relays = () => store.relays!;
+  const relays = () => store.relays;
   const disableFeatures = () => store.disableFeatures!;
   const requestedVersion = () => props.version;
 

@@ -9,6 +9,7 @@ describe("ui utils", () => {
   describe("parseContent", () => {
     const store = createMutable<PreferencesStore>({
       relays: [],
+      writeRelays: [],
       filter: {},
       profiles: () => [],
       rootEventIds: [],

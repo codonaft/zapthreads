@@ -20,7 +20,8 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
 
   const anchor = () => store.anchor!;
   const profiles = store.profiles!;
-  const relays = () => store.relays!;
+  const relays = () => store.relays;
+  const writeRelays = () => store.writeRelays;
 
   // Sessions
 
@@ -172,7 +173,11 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
           console.log('Publishing root event disabled', rootEvent);
         } else {
           console.log('publishing root event');
-          pool.publish(relays(), rootEvent);
+          const _relays = relays();
+          Promise.allSettled([
+            async () => await pool.publish(_relays, rootEvent),
+            async () => await publishEvent(rootEvent, writeRelays().filter(r => !_relays.includes(r))),
+          ]);
         }
         // Update filter to this rootEvent
         store.filter = { "#e": [rootEvent.id] };
@@ -199,7 +204,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
       setTimeout(() => onSuccess(event), 1000);
     } else {
       console.log('publishing something else');
-      const _relays = relays();
+      const _relays = writeRelays();
       const [ok, failures] = await publishEvent(event, _relays);
       if (ok === 0) {
         onError('Error: Your comment was not published to any relay');
