@@ -51,7 +51,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     store.replyPlaceholder = props.replyPlaceholder;
   });
 
-  const DEFAULT_RELAYS = "wss://relay.damus.io,wss://nos.lol";
   const MAX_RELAYS = 32;
   const relaysFromProps = () => props.relays;
   const [trackResubscribe, tryResubscribe] = createTrigger();
@@ -68,8 +67,8 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       signersStore.active && window.nostr
       ? await window.nostr.getRelays()
       : Object.fromEntries(
-          (props.relays || DEFAULT_RELAYS)
-            .split(",")
+          (props.relays || '')
+            .split(',')
             .map(r => [r, {read: true, write: true}]));
 
     const sortedRelays = Object
