@@ -2,6 +2,7 @@ import { ReactiveSet } from "@solid-primitives/set";
 import { UnsignedEvent } from "nostr-tools/pure";
 import { SimplePool } from "nostr-tools/pool";
 import { Filter } from "nostr-tools/filter";
+import { WindowNostr } from "nostr-tools/nip07";
 import { Profile } from "./models.ts";
 import { createMutable } from "solid-js/store";
 import { Eid } from "./models.ts";
@@ -69,8 +70,7 @@ export type Anchor = { type: 'http' | 'naddr' | 'note' | 'error', value: string;
 
 declare global {
   interface Window {
-    nostr?: {
-      getPublicKey(): Promise<string>;
+    nostr?: WindowNostr & {
       signEvent: SignEvent;
     };
   }
