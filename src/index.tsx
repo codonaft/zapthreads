@@ -4,7 +4,7 @@ import { createVisibilityObserver } from "@solid-primitives/intersection-observe
 import { createTrigger } from "@solid-primitives/trigger";
 import style from './styles/index.css?raw';
 import { saveRelayLatestForFilter, updateProfiles, totalChildren, sortByDate, parseUrlPrefixes, parseContent, getRelayLatest as getRelayLatestForFilter, normalizeURL, currentTime } from "./util/ui.ts";
-import { sleep, fetchRelayInformation, supportedReadRelay } from "./util/network.ts";
+import { sleep, fetchRelayInformation, supportedReadRelay, supportedWriteRelay } from "./util/network.ts";
 import { nest } from "./util/nest.ts";
 import { store, pool, isDisableType, signersStore } from "./util/stores.ts";
 import { Thread, ellipsisSvg } from "./thread.tsx";
@@ -13,6 +13,7 @@ import { decode as bolt11Decode } from "light-bolt11-decoder";
 import { clear as clearCache, find, findAll, save, watchAll } from "./util/db.ts";
 import { decode } from "nostr-tools/nip19";
 import { RelayRecord } from "nostr-tools/relay";
+import { Event } from "nostr-tools/core";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { Filter } from "nostr-tools/filter";
 import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, RelayInfo, Eid } from "./util/models.ts";
@@ -55,66 +56,101 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   const MAX_RELAYS = 32;
   const relaysFromProps = () => props.relays;
   const [trackResubscribe, tryResubscribe] = createTrigger();
-  createEffect(on([relaysFromProps], async () => {
+
+  const updateRelays = async () => {
     const now = currentTime();
-    const nextWeek = now + 7*24*60*60;
-    const nextTenMins = now + 10*60; // TODO: exp backoff
+    const week = 7*24*60*60;
+    const tenMins = 10*60;
 
     const relayInfos: { [name: string]: RelayInfo } = Object.fromEntries((await findAll('relayInfos')).map((r: RelayInfo) => [r.name, r]));
-    const expired = (name: string) => {
-      const info = relayInfos[name];
-      return !info || now >= info.expiresAt;
+    const infoExpired = (name: string) => {
+      const relayInfo = relayInfos[name];
+      const lastInfoUpdateAttemptAt = relayInfo && relayInfo.lastInfoUpdateAttemptAt;
+      return !lastInfoUpdateAttemptAt || now > lastInfoUpdateAttemptAt + (relayInfo.info ? tenMins : week); // TODO: always week, until unavailable + !info?
     };
 
-    const relays: RelayRecord =
+    const rawRelays: RelayRecord =
       signersStore.active && window.nostr
       ? await window.nostr.getRelays()
       : Object.fromEntries(
           (props.relays || '')
             .split(',')
-            .map(r => [r.trim(), {read: true, write: true}]));
+            .map(r => [r, {read: true, write: true}]));
 
+    const relays: RelayRecord = Object.fromEntries(
+      Object
+       .entries(rawRelays)
+       .map(([name, options]: [string, any]) => [name.trim(), options])
+       .filter(([name, options]) => name.length > 0)
+       .map(([name, options]) => [new URL(name).toString(), options]));
+
+    const eventStub: Event = {
+      kind: 1,
+      tags: [],
+      content: '',
+      created_at: 0,
+      pubkey: '',
+      id: '',
+      sig: '',
+    };
     const sortedRelays = Object
       .entries(relays)
-      .map(([name, options]: [string, any]) => [new URL(name).toString(), options])
       .sort(([a, _a], [b, _b]) => a.localeCompare(b));
 
-    const expiredRelays = sortedRelays.filter(([name, _]) => expired(name)).slice(0, MAX_RELAYS);
+    (async () => {
+      await sleep(); // Possibly do less interference with warmup
+      const expiredRelays = sortedRelays.filter(([name, _]) => infoExpired(name)).slice(0, MAX_RELAYS);
+      expiredRelays.length > 0 && console.log(`updating relay infos for ${expiredRelays.length} relays`);
+      Promise.allSettled(expiredRelays
+        .map(async ([name, _]) => {
+          let info;
+          try {
+            const possibleInfo = await fetchRelayInformation(name);
 
-    await Promise.allSettled(expiredRelays
-      .map(async ([name, _]) => {
-        let info;
-        let online = true;
-        try {
-          info = await fetchRelayInformation(name);
-        } catch (e) {
-          //console.log('failed to fetch relay information', e);
-          // TODO: if cors issue or whatever non-200 answer ..., otherwise (time out) — update expiresAt to smaller value (with exp backoff?)
-        }
-        await save('relayInfos', {
-          name,
-          info,
-          online,
-          expiresAt: online ? nextWeek : nextTenMins,
-        });
-      }));
+            // ensure server returned something parsable
+            supportedReadRelay(possibleInfo);
+            supportedWriteRelay(eventStub, possibleInfo);
 
-    const onlineRelays = sortedRelays
+            info = possibleInfo;
+          } catch (e) {
+            //console.log('failed to fetch relay information', e);
+            // TODO: if cors issue or whatever non-200 answer ..., otherwise (time out) — update expiresAt to smaller value (with exp backoff?)
+          }
+          await save('relayInfos', {
+            name,
+            info,
+            lastInfoUpdateAttemptAt: now,
+          });
+        }));
+    })();
+
+    const healthyRelays = sortedRelays
       .filter(([name, options]) => {
-        const info = relayInfos[name];
-        return expired(name) || (info && info.online && supportedReadRelay({}, info.info));
+        const relayInfo = relayInfos[name];
+        if (!relayInfo) {
+          return true;
+        }
+        const probablySupported = infoExpired(name) || (
+          (!options.read || supportedReadRelay(relayInfo.info)) &&
+          (!options.write || supportedWriteRelay(eventStub, relayInfo.info))
+        );
+        return probablySupported;
       })
       .slice(0, MAX_RELAYS);
-    const readRelays = onlineRelays.filter(([name, options]) => options.read).map(([r, _]) => r);
-    store.writeRelays = onlineRelays.filter(([name, options]) => options.write).map(([r, _]) => r);
+    const readRelays = healthyRelays.filter(([name, options]) => options.read).map(([r, _]) => r);
+    const writeRelays = healthyRelays.filter(([name, options]) => options.write).map(([r, _]) => r);
+
+    store.writeRelays = writeRelays;
     if (JSON.stringify(store.relays) !== JSON.stringify(readRelays)) {
-      console.log(`detected read relays changes ${store.relays} => ${readRelays}`);
       batch(() => {
         store.relays = readRelays;
         tryResubscribe();
       });
     }
-  }));
+    console.log(`readRelays=${readRelays} writeRelays=${writeRelays}`);
+  };
+
+  createEffect(on([relaysFromProps], updateRelays));
 
   const anchor = () => store.anchor!;
   const relays = () => store.relays;
@@ -387,6 +423,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         }
       };
       signersStore.active = signersStore.external;
+      updateRelays();
     }
   }));
 

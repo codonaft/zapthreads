@@ -69,9 +69,8 @@ export type Relay = {
 
 export type RelayInfo = {
   name: string;
-  expiresAt: number;
-  online: boolean;
   info?: RelayInformation;
+  lastInfoUpdateAttemptAt?: number;
 };
 
 // DB schema

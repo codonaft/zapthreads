@@ -173,11 +173,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
           console.log('Publishing root event disabled', rootEvent);
         } else {
           console.log('publishing root event');
-          const _relays = relays();
-          Promise.allSettled([
-            async () => await pool.publish(_relays, rootEvent),
-            async () => await publishEvent(rootEvent, writeRelays().filter(r => !_relays.includes(r))),
-          ]);
+          publishEvent(rootEvent, writeRelays());
         }
         // Update filter to this rootEvent
         store.filter = { "#e": [rootEvent.id] };

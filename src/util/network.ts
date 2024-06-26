@@ -4,6 +4,7 @@ import { RelayInformation, fetchRelayInformation as internalFetchRelayInformatio
 import { getPow } from "nostr-tools/nip13";
 import { findAll } from "./db.ts";
 import { store } from "./stores.ts";
+import { RelayInfo } from "./models.ts";
 
 const TIMEOUT = 7000;
 
@@ -62,71 +63,14 @@ const publishConcurrently = async <T>(event: Event, relays: string[]): Promise<[
   return [ok, failures];
 };
 
-// TODO: remove and use store?
-export type Capabilities = {
-  nips?: number[];
-  allow_auth?: boolean;
-  allow_paid?: boolean;
-};
-
-export const supportedReadRelay = (required: Capabilities, info?: RelayInformation) => {
-  const languages = store.languages;
-  if (languages.length > 0 && info && info.language_tags && info.language_tags.length > 0) {
-    for (const lang of languages) {
-      if (!info.language_tags.includes(lang)) {
-        console.log('UNSUPPORTED read relay', info);
-        return false;
-      }
-    }
-  }
-  return true;
-};
-
-const supportedWriteRelay = (event: Event, required: Capabilities, info?: RelayInformation) => {
+export const supportedReadRelay = (info?: RelayInformation) => {
   if (!info) {
     return true;
   }
 
-  if (!supportedReadRelay(required, info)) {
-    return false;
-  }
-
-  if (required.nips && required.nips.filter(n => info.supported_nips.includes(n)).length !== required.nips.length) {
-    return false;
-  }
-
-  /*const retention = info.retention;
-  if (retention) {
-      console.log('supportedWriteRelay 4.0');
-    const available = retention.filter(r => {
-      const disallowed = r.time? === 0 || r.count? === 0;
-      const kindMatches = r.kinds.length === 0 || r.kinds.includes(event.kind);
-      const kindRangeMatches = r.kinds.map((ks: number[]) => ks.length == 2 && event.kind >= ks[0] && event.kind <= ks[1]).length > 0;
-      return disallowed && (kindMatches || kindRangeMatches);
-    }).length === 0;
-    if (!available) {
-      console.log('supportedWriteRelay 4.1');
-      return false;
-    }
-  }*/
-
-  const limitation = info.limitation;
-  if (limitation) {
-    const allow_auth = required.allow_auth && required.allow_auth!;
-    if (!allow_auth && limitation.auth_required && limitation.auth_required!) {
-      return false;
-    }
-    const allow_paid = required.allow_paid && required.allow_paid!;
-    if (!allow_paid && limitation.payment_required && limitation.payment_required!) {
-      return false;
-    }
-    if (limitation.min_pow_difficulty && getPow(event.id) > limitation.min_pow_difficulty) {
-      return false;
-    }
-    if (limitation.max_content_length && event.content.length > limitation.max_content_length) {
-      return false;
-    }
-    if (limitation.max_message_length && ('["EVENT",' + JSON.stringify(event) + ']').length > limitation.max_message_length) {
+  const languages = store.languages;
+  if (languages.length > 0 && info.language_tags && info.language_tags.length > 0) {
+    if (languages.filter(lang => info.language_tags!.includes(lang)).length !== languages.length) {
       return false;
     }
   }
@@ -134,16 +78,54 @@ const supportedWriteRelay = (event: Event, required: Capabilities, info?: RelayI
   return true;
 };
 
-export const publishEvent = async (event: Event, relays: string[], required: Capabilities = {}): Promise<[number, number]> => {
+export const supportedWriteRelay = (event: Event, info?: RelayInformation) => {
+  if (!info) return true;
+  if (!supportedReadRelay(info)) return false;
+
+  /* TODO: enable when more relays will report they support NIP-25
+  const requiredNips = event.kind === 7 ? [25] : [];
+  if (info.supported_nips.length > 0 && requiredNips.filter(n => info.supported_nips.includes(n)).length !== requiredNips.length) {
+    return false;
+  }*/
+
+  const retention = info.retention;
+  if (retention) {
+    const allowed = retention.filter(r => {
+      const disallowed = (r.time && r.time === 0) || (r.count && r.count === 0);
+      const kindMatches = r.kinds.includes(event.kind);
+      const kindRangeMatches = r.kinds
+        .filter(r => Array.isArray(r))
+        .map(r => r as number[])
+        .map(kindRange => kindRange.length == 2 && event.kind >= kindRange[0] && event.kind <= kindRange[1])
+        .length > 0;
+      return disallowed && (kindMatches || kindRangeMatches);
+    }).length === 0;
+    if (!allowed) {
+      return false;
+    }
+  }
+
+  const limitation = info.limitation;
+  if (limitation) {
+    if (limitation.auth_required && limitation.auth_required!) return false;
+    if (limitation.payment_required && limitation.payment_required!) return false;
+    if (limitation.min_pow_difficulty && getPow(event.id) < limitation.min_pow_difficulty) return false;
+    if (limitation.max_content_length && event.content.length > limitation.max_content_length) return false;
+    if (limitation.max_message_length && ('["EVENT",' + JSON.stringify(event) + ']').length > limitation.max_message_length) return false;
+  }
+
+  return true;
+};
+
+export const publishEvent = async (event: Event, relays: string[]): Promise<[number, number]> => {
   //publishAttempt += 1;
-  const relaysFromDb = await findAll('relayInfos');
-  const supportedWriteRelayInfos = relaysFromDb.filter(r => supportedWriteRelay(event, required, r.info));
-
-  //TODO: const supportedWriteRelays = supportedWriteRelayInfos.map(r => r.name);
-  const supportedWriteRelays = relays;
-
-  const pow = Math.min(...supportedWriteRelayInfos.map(r => r.info?.limitation?.min_pow_difficulty || 0));
-  console.log('pow', pow); // TODO: use it
+  const relayInfos: { [name: string]: RelayInfo } = Object.fromEntries((await findAll('relayInfos')).map((r: RelayInfo) => [r.name, r])); // TODO: extract? find single item?
+  const supportedWriteRelays = relays.filter(r => {
+    const relayInfo = relayInfos[r];
+    return !relayInfo || supportedWriteRelay(event, relayInfo.info);
+  });
+  //const pow = Math.min(...supportedWriteRelayInfos.map(r => r.info?.limitation?.min_pow_difficulty || 0));
+  //console.log('pow', pow); // TODO: use it in signAndPublishEvent
   const startTime = Date.now();
   const [ok, failures] = publishAttempt % 2 == 0 ? await publishConcurrently(event, supportedWriteRelays) : await publishSequentially(event, supportedWriteRelays);
   const deltaTime = Date.now() - startTime;
