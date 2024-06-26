@@ -49,6 +49,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     store.disableFeatures = props.disable.split(',').map(e => e.trim()).filter(isDisableType);
     store.urlPrefixes = parseUrlPrefixes(props.urls);
     store.replyPlaceholder = props.replyPlaceholder;
+    store.languages = props.languages.split(',').map(e => e.trim());
   });
 
   const MAX_RELAYS = 32;
@@ -60,8 +61,10 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     const nextTenMins = now + 10*60; // TODO: exp backoff
 
     const relayInfos: { [name: string]: RelayInfo } = Object.fromEntries((await findAll('relayInfos')).map((r: RelayInfo) => [r.name, r]));
-    const expired = (name: string) => !relayInfos[name] || now >= relayInfos[name].expiresAt;
-    const possiblyOnline = (name: string) => expired(name) || relayInfos[name].online;
+    const expired = (name: string) => {
+      const info = relayInfos[name];
+      return !info || now >= info.expiresAt;
+    };
 
     const relays: RelayRecord =
       signersStore.active && window.nostr
@@ -69,7 +72,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       : Object.fromEntries(
           (props.relays || '')
             .split(',')
-            .map(r => [r, {read: true, write: true}]));
+            .map(r => [r.trim(), {read: true, write: true}]));
 
     const sortedRelays = Object
       .entries(relays)
@@ -96,7 +99,12 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         });
       }));
 
-    const onlineRelays = sortedRelays.filter(([name, options]) => possiblyOnline(name)).slice(0, MAX_RELAYS);
+    const onlineRelays = sortedRelays
+      .filter(([name, options]) => {
+        const info = relayInfos[name];
+        return expired(name) || (info && info.online && supportedReadRelay({}, info.info));
+      })
+      .slice(0, MAX_RELAYS);
     const readRelays = onlineRelays.filter(([name, options]) => options.read).map(([r, _]) => r);
     store.writeRelays = onlineRelays.filter(([name, options]) => options.write).map(([r, _]) => r);
     if (JSON.stringify(store.relays) !== JSON.stringify(readRelays)) {
@@ -506,6 +514,7 @@ customElement<ZapThreadsAttributes>('zap-threads', {
   urls: "",
   'reply-placeholder': "",
   'legacy-url': "",
+  languages: '',
 }, (props) => {
   return <ZapThreads
     anchor={props['anchor'] ?? ''}
@@ -517,11 +526,12 @@ customElement<ZapThreadsAttributes>('zap-threads', {
     urls={props['urls'] ?? ''}
     replyPlaceholder={props['reply-placeholder'] ?? ''}
     legacyUrl={props['legacy-url'] ?? ''}
+    languages={props['languages'] ?? ''}
   />;
 });
 
 export type ZapThreadsAttributes = {
-  [key in 'anchor' | 'version' | 'relays' | 'user' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url']?: string;
+  [key in 'anchor' | 'version' | 'relays' | 'user' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'languages']?: string;
 } & JSX.HTMLAttributes<HTMLElement>;
 
 export function setLoginCallback(onLogin?: () => Promise<boolean>) {

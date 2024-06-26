@@ -70,16 +70,15 @@ export type Capabilities = {
 };
 
 export const supportedReadRelay = (required: Capabilities, info?: RelayInformation) => {
-  /*const languages = store.languages;
-  console.log('languages', languages, info);
-  if (languages && info && info.language_tags && info.language_tags.length > 0) {
+  const languages = store.languages;
+  if (languages.length > 0 && info && info.language_tags && info.language_tags.length > 0) {
     for (const lang of languages) {
       if (!info.language_tags.includes(lang)) {
         console.log('UNSUPPORTED read relay', info);
         return false;
       }
     }
-  }*/
+  }
   return true;
 };
 
