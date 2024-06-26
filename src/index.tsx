@@ -1,8 +1,10 @@
-import { JSX, createComputed, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js";
+import { JSX, createComputed, createEffect, createMemo, createSignal, on, onCleanup, batch } from "solid-js";
 import { customElement } from 'solid-element';
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer";
+import { createTrigger } from "@solid-primitives/trigger";
 import style from './styles/index.css?raw';
-import { saveRelayLatestForFilter, updateProfiles, totalChildren, sortByDate, parseUrlPrefixes, parseContent, getRelayLatest as getRelayLatestForFilter, normalizeURL } from "./util/ui.ts";
+import { saveRelayLatestForFilter, updateProfiles, totalChildren, sortByDate, parseUrlPrefixes, parseContent, getRelayLatest as getRelayLatestForFilter, normalizeURL, currentTime } from "./util/ui.ts";
+import { sleep, fetchRelayInformation, supportedReadRelay } from "./util/network.ts";
 import { nest } from "./util/nest.ts";
 import { store, pool, isDisableType, signersStore } from "./util/stores.ts";
 import { Thread, ellipsisSvg } from "./thread.tsx";
@@ -10,9 +12,10 @@ import { RootComment } from "./reply.tsx";
 import { decode as bolt11Decode } from "light-bolt11-decoder";
 import { clear as clearCache, find, findAll, save, watchAll } from "./util/db.ts";
 import { decode } from "nostr-tools/nip19";
+import { RelayRecord } from "nostr-tools/relay";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { Filter } from "nostr-tools/filter";
-import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind } from "./util/models.ts";
+import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, RelayInfo, Eid } from "./util/models.ts";
 import { SubCloser } from "nostr-tools/pool";
 
 const ZapThreads = (props: { [key: string]: string; }) => {
@@ -39,9 +42,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       }
     })();
 
-    const defaultRelays = "wss://relay.damus.io,wss://nos.lol";
-    store.relays = (props.relays || defaultRelays).split(",").map(r => new URL(r).toString());
-
     if ((props.author || '').startsWith('npub')) {
       store.externalAuthor = props.author;
     }
@@ -50,6 +50,65 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     store.urlPrefixes = parseUrlPrefixes(props.urls);
     store.replyPlaceholder = props.replyPlaceholder;
   });
+
+  const DEFAULT_RELAYS = "wss://relay.damus.io,wss://nos.lol";
+  const MAX_RELAYS = 32;
+  const relaysFromProps = () => props.relays;
+  const [trackResubscribe, tryResubscribe] = createTrigger();
+  createEffect(on([relaysFromProps], async () => {
+    const now = currentTime();
+    const nextWeek = now + 7*24*60*60;
+    const nextTenMins = now + 10*60; // TODO: exp backoff
+
+    const relayInfos: { [name: string]: RelayInfo } = Object.fromEntries((await findAll('relayInfos')).map((r: RelayInfo) => [r.name, r]));
+    const expired = (name: string) => !relayInfos[name] || now >= relayInfos[name].expiresAt;
+    const possiblyOnline = (name: string) => expired(name) || relayInfos[name].online;
+
+    const relays: RelayRecord =
+      signersStore.active && window.nostr
+      ? await window.nostr.getRelays()
+      : Object.fromEntries(
+          (props.relays || DEFAULT_RELAYS)
+            .split(",")
+            .map(r => [r, {read: true, write: true}]));
+
+    const sortedRelays = Object
+      .entries(relays)
+      .map(([name, options]: [string, any]) => [new URL(name).toString(), options])
+      .sort(([a, _a], [b, _b]) => a.localeCompare(b));
+
+    const expiredRelays = sortedRelays.filter(([name, _]) => expired(name)).slice(0, MAX_RELAYS);
+
+    await Promise.allSettled(expiredRelays
+      .map(async ([name, _]) => {
+        let info;
+        let online = true;
+        try {
+          info = await fetchRelayInformation(name);
+        } catch (e) {
+          //console.log('failed to fetch relay information', e);
+          // TODO: if cors issue or whatever non-200 answer ..., otherwise (time out) — update expiresAt to smaller value (with exp backoff?)
+        }
+        await save('relayInfos', {
+          name,
+          info,
+          online,
+          expiresAt: online ? nextWeek : nextTenMins,
+        });
+      }));
+
+    const onlineRelays = sortedRelays.filter(([name, options]) => possiblyOnline(name)).slice(0, MAX_RELAYS);
+    const readRelays: string[] = onlineRelays.filter(([name, options]) => options.read).map(([r, _]) => r);
+    const writeRelays: string[] = onlineRelays.filter(([name, options]) => options.write).map(([r, _]) => r); // TODO
+
+    if (!store.relays || JSON.stringify(store.relays) !== JSON.stringify(readRelays)) {
+      console.log(`detected read relays changes ${store.relays} => ${readRelays}`);
+      batch(() => {
+        store.relays = readRelays;
+        tryResubscribe();
+      });
+    }
+  }));
 
   const anchor = () => store.anchor!;
   const relays = () => store.relays!;
@@ -178,7 +237,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   let sub: SubCloser | null;
 
   // Filter -> remote events, content
-  createEffect(on([filter], async () => {
+  createEffect(on([filter, trackResubscribe], async () => {
     // Fix values to this effect
     const _filter = filter();
     const _relays = relays();
@@ -186,7 +245,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     const _events = events();
     const _profiles = store.profiles();
 
-    if (Object.entries(_filter).length === 0) {
+    if (Object.entries(_filter).length === 0 || _relays.length === 0) {
       return;
     }
 
@@ -210,7 +269,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     //   kinds.push(9735);
     // }
 
-    console.log('[zapthreads] subscribing to', _anchor.value);
+    console.log(`[zapthreads] subscribing to ${_anchor.value} on ${_relays}`);
 
     const since = await getRelayLatestForFilter(_anchor, _relays);
 

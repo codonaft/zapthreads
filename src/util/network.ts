@@ -149,7 +149,7 @@ export const publishEvent = async (event: Event, relays: string[], required: Cap
   const [ok, failures] = publishAttempt % 2 == 0 ? await publishConcurrently(event, supportedWriteRelays) : await publishSequentially(event, supportedWriteRelays);
   const deltaTime = Date.now() - startTime;
   const unsupported = relays.length - supportedWriteRelays.length;
-  console.log(`[zapthreads] publish ok=${ok} failed=${failures.length} unsupported=${unsupported} took ${deltaTime} ms`);
+  console.log(`[zapthreads] publish to ${supportedWriteRelays} ok=${ok} failed=${failures.length} unsupported=${unsupported} took ${deltaTime} ms`);
   failures.length > 0 && console.log(failures);
   return [ok, failures.length]
 };
