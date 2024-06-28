@@ -49,8 +49,7 @@ Arguments:
    - NIP-19 naddr, note, nevent or URL from where to retrieve events
  - `version`
    - ID of the event to show in case a naddr (long-form note) has multiple versions
- - `relays`: comma-separated list of preferred relays
-   - defaults to `wss://relay.damus.io,wss://nos.lol`)
+ - `relays`: comma-separated list of read relays, unset by default (will not load any content)
  - `user`:
    - npub to log in the user as (they will only be able to sign with a NIP-07 extension)
    - nsec is also supported
@@ -69,6 +68,7 @@ Arguments:
  - `urls`: comma-separated pairs of URLs
    - defaults to `naddr:nostr.com/,npub:nostr.com/,nprofile:nostr.com/,nevent:nostr.com/,note:nostr.com/,tag:snort.social/t/`
    - `https://` will be automatically prepended
+ - `languages`: comma-separated string of allowed languages, no restrictions by default
  - `min-pow` and `max-pow` (boundaries of difficulty that define how warmer we make our planet while desperately fighting spam, disabled by default)
 
 ```html
