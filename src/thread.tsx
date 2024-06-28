@@ -13,8 +13,6 @@ import { remove } from "./util/db.ts";
 export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottomNestedEvents?: () => NestedNoteEvent[]; articles: () => NoteEvent[]; votes: () => ReactionEvent[]; firstLevelComments?: () => number; }) => {
   const anchor = () => store.anchor!;
   const profiles = store.profiles!;
-  const relays = () => store.relays;
-  const writeRelays = () => store.writeRelays;
 
   const MIN_AUTO_COLLAPSED_THREADS = 3;
   const MIN_AUTO_COLLAPSED_COMMENTS = 5;

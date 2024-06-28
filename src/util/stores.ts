@@ -12,7 +12,7 @@ import { NestedNoteEvent } from "./nest.ts";
 export const pool = new SimplePool();
 
 export const store = createMutable<PreferencesStore>({
-  relays: [], // TODO: readRelays
+  readRelays: [],
   writeRelays: [],
   rootEventIds: [],
   topRootEventIds: new Set,
@@ -49,7 +49,7 @@ export const isDisableType = (type: string): type is DisableType => {
 
 export type PreferencesStore = {
   anchor?: Anchor, // derived from anchor prop
-  relays: string[]; // prop
+  readRelays: string[];
   writeRelays: string[];
   version?: string;  // derived from version prop
   rootEventIds: string[];  // derived from anchor prop

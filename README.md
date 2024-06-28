@@ -49,7 +49,7 @@ Arguments:
    - NIP-19 naddr, note, nevent or URL from where to retrieve events
  - `version`
    - ID of the event to show in case a naddr (long-form note) has multiple versions
- - `relays`: comma-separated list of read relays, unset by default (will not load any content)
+ - `read-relays`: comma-separated list of read-only relays, unset by default (will not load any content)
  - `user`:
    - npub to log in the user as (they will only be able to sign with a NIP-07 extension)
    - nsec is also supported
@@ -75,7 +75,7 @@ Arguments:
 <zap-threads 
   anchor="naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk6zne58wzh0waycrqsqqqa28pjfdhz"
   user="npub1wf4pufsucer5va8g9p0rj5dnhvfeh6d8w0g6eayaep5dhps6rsgs43dgh9"
-  relays="wss://relay.nostr.band,wss://nostr-pub.wellorder.net/"
+  read-relays="wss://relay.nostr.band,wss://nostr-pub.wellorder.net/"
   disable="likes"
   />
 ```

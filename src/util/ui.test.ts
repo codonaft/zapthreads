@@ -8,7 +8,7 @@ import { eventToNoteEvent } from "./models.ts";
 describe("ui utils", () => {
   describe("parseContent", () => {
     const store = createMutable<PreferencesStore>({
-      relays: [],
+      readRelays: [],
       writeRelays: [],
       filter: {},
       languages: [],

@@ -67,7 +67,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   });
 
   const MAX_RELAYS = 32;
-  const relaysFromProps = () => props.relays;
+  const rawReadRelays = () => props.readRelays;
   const [trackResubscribe, tryResubscribe] = createTrigger();
 
   const updateRelays = async () => {
@@ -86,7 +86,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       signersStore.active && window.nostr
       ? await window.nostr.getRelays()
       : Object.fromEntries(
-          (props.relays || '')
+          (props.readRelays || '')
             .split(',')
             .map(r => [r, {read: true, write: true}]));
 
@@ -157,9 +157,9 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     const writeRelays = healthyRelays.filter(([name, options]) => options.write).map(([r, _]) => r);
 
     store.writeRelays = writeRelays;
-    if (JSON.stringify(store.relays) !== JSON.stringify(readRelays)) {
+    if (JSON.stringify(store.readRelays) !== JSON.stringify(readRelays)) {
       batch(() => {
-        store.relays = readRelays;
+        store.readRelays = readRelays;
         tryResubscribe();
       });
     }
@@ -167,10 +167,10 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     console.log(`readRelays=${readRelays} writeRelays=${writeRelays}`);
   };
 
-  createEffect(on([relaysFromProps], updateRelays));
+  createEffect(on([rawReadRelays], updateRelays));
 
   const anchor = () => store.anchor!;
-  const relays = () => store.relays;
+  const readRelays = () => store.readRelays;
   const disableFeatures = () => store.disableFeatures!;
   const requestedVersion = () => props.version;
 
@@ -186,7 +186,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   }));
 
   // Anchors -> root events
-  createComputed(on([anchor, relays], async () => {
+  createComputed(on([anchor, readRelays], async () => {
     if (anchor().type === 'error') return;
 
     let filterForRemoteRootEvents: Filter;
@@ -228,7 +228,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     }
 
     // No `since` here as we are not keeping track of a since for root events
-    const remoteRootEvents = await pool.querySync(relays(), { ...filterForRemoteRootEvents });
+    const remoteRootEvents = await pool.querySync(readRelays(), { ...filterForRemoteRootEvents });
 
     const remoteRootNoteEvents = remoteRootEvents.map(eventToNoteEvent);
     for (const e of remoteRootNoteEvents) {
@@ -299,12 +299,12 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   createEffect(on([filter, trackResubscribe], async () => {
     // Fix values to this effect
     const _filter = filter();
-    const _relays = relays();
+    const _readRelays = readRelays();
     const _anchor = anchor();
     const _events = events();
     const _profiles = store.profiles();
 
-    if (Object.entries(_filter).length === 0 || _relays.length === 0) {
+    if (Object.entries(_filter).length === 0 || _readRelays.length === 0) {
       return;
     }
 
@@ -328,17 +328,18 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     //   kinds.push(9735);
     // }
 
-    console.log(`[zapthreads] subscribing to ${_anchor.value} on ${_relays}`);
+    console.log(`[zapthreads] subscribing to ${_anchor.value} on ${_readRelays}`);
 
-    const since = await getRelayLatestForFilter(_anchor, _relays);
+    const since = await getRelayLatestForFilter(_anchor, _readRelays);
 
     const newLikeIds = new Set<string>();
     const newZaps: { [id: string]: string; } = {};
 
-    sub = pool.subscribeMany(_relays, [{ ..._filter, kinds, since }],
+    sub = pool.subscribeMany(_readRelays, [{ ..._filter, kinds, since }],
       {
         onevent(e) {
           if (!powIsOk(e, store.powDifficulty)) {
+            // TODO: remove spam if it's still in the db
             return;
           }
           if (e.kind === 1 || e.kind === 9802) {
@@ -381,14 +382,14 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
           setTimeout(async () => {
             // Update profiles of current events (includes anchor author)
-            await updateProfiles([..._events.map(e => e.pk)], _relays, _profiles);
+            await updateProfiles([..._events.map(e => e.pk)], _readRelays, _profiles);
 
             // Save latest received events for each relay
             saveRelayLatestForFilter(_anchor, _events);
 
             if (closeOnEose()) {
               sub?.close();
-              pool.close(_relays);
+              pool.close(_readRelays);
             }
           }, 96); // same as batched throttle in db.ts
         }
@@ -564,7 +565,7 @@ export default ZapThreads;
 customElement<ZapThreadsAttributes>('zap-threads', {
   anchor: "",
   version: "",
-  relays: "",
+  'read-relays': "",
   user: "",
   author: "",
   disable: "",
@@ -578,7 +579,7 @@ customElement<ZapThreadsAttributes>('zap-threads', {
   return <ZapThreads
     anchor={props['anchor'] ?? ''}
     version={props['version'] ?? ''}
-    relays={props['relays'] ?? ''}
+    readRelays={props['read-relays'] ?? ''}
     user={props['user'] ?? ''}
     author={props['author'] ?? ''}
     disable={props['disable'] ?? ''}
@@ -592,7 +593,7 @@ customElement<ZapThreadsAttributes>('zap-threads', {
 });
 
 export type ZapThreadsAttributes = {
-  [key in 'anchor' | 'version' | 'relays' | 'user' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'languages' | 'min-pow' | 'max-pow']?: string;
+  [key in 'anchor' | 'version' | 'read-relays' | 'user' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'languages' | 'min-pow' | 'max-pow']?: string;
 } & JSX.HTMLAttributes<HTMLElement>;
 
 export function setLoginCallback(onLogin?: () => Promise<boolean>) {

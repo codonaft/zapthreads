@@ -20,7 +20,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
 
   const anchor = () => store.anchor!;
   const profiles = store.profiles!;
-  const relays = () => store.relays;
+  const readRelays = () => store.readRelays;
   const writeRelays = () => store.writeRelays;
 
   // Sessions
@@ -56,7 +56,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
         await save('profiles', profile);
       }
       setLoggedInUser(profile);
-      updateProfiles([pk], relays(), profiles());
+      updateProfiles([pk], readRelays(), profiles());
     } else {
       setLoggedInUser();
     }
@@ -190,7 +190,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
       if (ok === 0) {
         onError('Error: Your comment was not published to any relay');
       } else {
-        const msg = `Published to ${ok}/${store.writeRelays.length} relays (see console for more info)`;
+        const msg = `Published to ${ok}/${writeRelays().length} relays (see console for more info)`;
         const notice = failures > 0 ? msg : undefined;
         onSuccess(event, notice);
       }
