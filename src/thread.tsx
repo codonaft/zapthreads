@@ -1,11 +1,10 @@
 import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on } from "solid-js";
 import { currentTime, defaultPicture, parseContent, shortenEncodedId, sortByDate, svgWidth, timeAgo, totalChildren } from "./util/ui.ts";
-import { publishEvent } from "./util/network.ts";
+import { signAndPublishEvent } from "./util/network.ts";
 import { ReplyEditor } from "./reply.tsx";
 import { NestedNoteEvent } from "./util/nest.ts";
 import { noteEncode, npubEncode } from "nostr-tools/nip19";
 import { UnsignedEvent, Event } from "nostr-tools/core";
-import { getEventHash, finalizeEvent } from "nostr-tools/pure";
 import { Relay } from "nostr-tools/relay";
 import { EventSigner, signersStore, store } from "./util/stores.ts";
 import { NoteEvent, Profile, Pk, ReactionEvent, VoteKind, Eid, voteKind } from "./util/models.ts";
@@ -134,7 +133,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
                   ['e', note.id, '', 'reply'],
                   ['p', signer.pk],
                 ],
-              });
+              }, signer);
             };
 
             const unpublishOutdatedEvents = async () => {
@@ -150,20 +149,11 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
                 content: '',
                 pubkey: signer.pk,
                 tags: eids.map(eid => ['e', eid]),
-              });
+              }, signer);
               if (sentRequest) {
                 remove('reactions', eids);
               }
             };
-
-            const signAndPublishEvent = async (unsignedEvent: UnsignedEvent) => {
-              const id = getEventHash(unsignedEvent);
-              const signature = await signer.signEvent!(unsignedEvent);
-              const event: Event = { id, ...unsignedEvent, ...signature };
-              console.log(JSON.stringify(event, null, 2));
-              const [ok, failures] = await publishEvent(event, writeRelays());
-              return ok > 0;
-            }
 
             await unpublishOutdatedEvents();
             if ([-1, 1].includes(newVote)) {

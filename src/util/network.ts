@@ -1,10 +1,11 @@
-import { Event } from "nostr-tools/core";
+import { UnsignedEvent, Event } from "nostr-tools/core";
+import { getEventHash } from "nostr-tools/pure";
 import { Relay } from "nostr-tools/relay";
 import { RelayInformation, fetchRelayInformation as internalFetchRelayInformation } from "nostr-tools/nip11";
-import { getPow } from "nostr-tools/nip13";
+import { getPow, minePow } from "nostr-tools/nip13";
 import { findAll } from "./db.ts";
-import { store } from "./stores.ts";
-import { RelayInfo } from "./models.ts";
+import { EventSigner, store } from "./stores.ts";
+import { Eid, RelayInfo } from "./models.ts";
 
 const TIMEOUT = 7000;
 
@@ -63,6 +64,12 @@ const publishConcurrently = async <T>(event: Event, relays: string[]): Promise<[
   return [ok, failures];
 };
 
+export const powIsOk = (event: { id: Eid, tags: string[][] }, minPow: number): boolean => {
+  const nonce = event.tags.find(i => i[0] === 'nonce');
+  const powFromNonce = nonce && +nonce[2] || 0;
+  return powFromNonce >= minPow && getPow(event.id) >= minPow;
+};
+
 export const supportedReadRelay = (info?: RelayInformation) => {
   if (!info) {
     return true;
@@ -78,7 +85,7 @@ export const supportedReadRelay = (info?: RelayInformation) => {
   return true;
 };
 
-export const supportedWriteRelay = (event: Event, info?: RelayInformation) => {
+export const supportedWriteRelay = (event: Event, info?: RelayInformation, maxPow?: number) => {
   if (!info) return true;
   if (!supportedReadRelay(info)) return false;
 
@@ -109,7 +116,7 @@ export const supportedWriteRelay = (event: Event, info?: RelayInformation) => {
   if (limitation) {
     if (limitation.auth_required && limitation.auth_required!) return false;
     if (limitation.payment_required && limitation.payment_required!) return false;
-    if (limitation.min_pow_difficulty && getPow(event.id) < limitation.min_pow_difficulty) return false;
+    if (limitation.min_pow_difficulty && ((maxPow && maxPow < limitation.min_pow_difficulty) || (getPow(event.id) < limitation.min_pow_difficulty))) return false;
     if (limitation.max_content_length && event.content.length > limitation.max_content_length) return false;
     if (limitation.max_message_length && ('["EVENT",' + JSON.stringify(event) + ']').length > limitation.max_message_length) return false;
   }
@@ -117,10 +124,11 @@ export const supportedWriteRelay = (event: Event, info?: RelayInformation) => {
   return true;
 };
 
-export const publishEvent = async (event: Event, relays: string[]): Promise<[number, number]> => {
+export const publishEvent = async (event: Event): Promise<[number, number]> => {
   //publishAttempt += 1;
+  const writeRelays = store.writeRelays;
   const relayInfos: { [name: string]: RelayInfo } = Object.fromEntries((await findAll('relayInfos')).map((r: RelayInfo) => [r.name, r])); // TODO: extract? find single item?
-  const supportedWriteRelays = relays.filter(r => {
+  const supportedWriteRelays = writeRelays.filter(r => {
     const relayInfo = relayInfos[r];
     return !relayInfo || supportedWriteRelay(event, relayInfo.info);
   });
@@ -129,10 +137,33 @@ export const publishEvent = async (event: Event, relays: string[]): Promise<[num
   const startTime = Date.now();
   const [ok, failures] = publishAttempt % 2 == 0 ? await publishConcurrently(event, supportedWriteRelays) : await publishSequentially(event, supportedWriteRelays);
   const deltaTime = Date.now() - startTime;
-  const unsupported = relays.length - supportedWriteRelays.length;
+  const unsupported = writeRelays.length - supportedWriteRelays.length;
   console.log(`[zapthreads] publish to ${supportedWriteRelays} ok=${ok} failed=${failures.length} unsupported=${unsupported} took ${deltaTime} ms`);
   failures.length > 0 && console.log(failures);
   return [ok, failures.length]
 };
 
 export const fetchRelayInformation = async (relay: string): Promise<RelayInformation> => await timeLimit(async () => await internalFetchRelayInformation(relay));
+
+// TODO: move
+export const sign = async (unsignedEvent: UnsignedEvent, signer: EventSigner) => {
+  const pow = store.powDifficulty;
+  let event: Event;
+  if (pow > 0) {
+    const eventWithPow = minePow(unsignedEvent, pow);
+    const signature = await signer.signEvent!(eventWithPow);
+    event = { ...eventWithPow, ...signature };
+  } else {
+    const id = getEventHash(unsignedEvent);
+    const signature = await signer.signEvent!(unsignedEvent);
+    event = { id, ...unsignedEvent, ...signature };
+  }
+  console.log(JSON.stringify(event, null, 2));
+  return event;
+}
+
+export const signAndPublishEvent = async (unsignedEvent: UnsignedEvent, signer: EventSigner): Promise<[number, number, Event]> => {
+  const event = await sign(unsignedEvent, signer);
+  const [ok, failures] = await publishEvent(event);
+  return [ok, failures, event];
+}

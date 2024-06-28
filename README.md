@@ -69,6 +69,7 @@ Arguments:
  - `urls`: comma-separated pairs of URLs
    - defaults to `naddr:nostr.com/,npub:nostr.com/,nprofile:nostr.com/,nevent:nostr.com/,note:nostr.com/,tag:snort.social/t/`
    - `https://` will be automatically prepended
+ - `min-pow` and `max-pow` (boundaries of difficulty that define how warmer we make our planet while desperately fighting spam, disabled by default)
 
 ```html
 <zap-threads 

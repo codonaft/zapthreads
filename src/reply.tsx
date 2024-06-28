@@ -1,5 +1,5 @@
 import { currentTime, defaultPicture, generateTags, satsAbbrev, shortenEncodedId, updateProfiles } from "./util/ui.ts";
-import { publishEvent } from "./util/network.ts";
+import { publishEvent, signAndPublishEvent, sign } from "./util/network.ts";
 import { Show, createEffect, createSignal } from "solid-js";
 import { UnsignedEvent, Event } from "nostr-tools/core";
 import { EventSigner, pool, signersStore, store } from "./util/stores.ts";
@@ -160,12 +160,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
           content: `Comments on ${url} ↴`
         };
 
-        const rootEvent: Event = {
-          id: getEventHash(unsignedRootEvent),
-          ...unsignedRootEvent,
-          ...await signer.signEvent(unsignedRootEvent)
-        };
-
+        const rootEvent = await sign(unsignedRootEvent, signer);
         save('events', eventToNoteEvent(rootEvent));
 
         // Publish, store filter and get updated rootTag
@@ -173,7 +168,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
           console.log('Publishing root event disabled', rootEvent);
         } else {
           console.log('publishing root event');
-          publishEvent(rootEvent, writeRelays());
+          publishEvent(rootEvent);
         }
         // Update filter to this rootEvent
         store.filter = { "#e": [rootEvent.id] };
@@ -185,27 +180,17 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
       unsignedEvent.tags.push(['a', anchor().value, '', 'root']);
     }
 
-    const id = getEventHash(unsignedEvent);
-
-    // Attempt to sign the event
-    const signature = await signer.signEvent(unsignedEvent);
-
-    const event: Event = { id, ...unsignedEvent, ...signature };
-
     setLoading(true);
-    console.log(JSON.stringify(event, null, 2));
-
     if (store.disableFeatures!.includes('publish')) {
       // Simulate publishing
+      const event = await sign(unsignedEvent, signer);
       setTimeout(() => onSuccess(event), 1000);
     } else {
-      console.log('publishing something else');
-      const _relays = writeRelays();
-      const [ok, failures] = await publishEvent(event, _relays);
+      const [ok, failures, event] = await signAndPublishEvent(unsignedEvent, signer);
       if (ok === 0) {
         onError('Error: Your comment was not published to any relay');
       } else {
-        const msg = `Published to ${ok}/${_relays.length} relays (see console for more info)`;
+        const msg = `Published to ${ok}/${store.writeRelays.length} relays (see console for more info)`;
         const notice = failures > 0 ? msg : undefined;
         onSuccess(event, notice);
       }

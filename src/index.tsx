@@ -4,7 +4,7 @@ import { createVisibilityObserver } from "@solid-primitives/intersection-observe
 import { createTrigger } from "@solid-primitives/trigger";
 import style from './styles/index.css?raw';
 import { saveRelayLatestForFilter, updateProfiles, totalChildren, sortByDate, parseUrlPrefixes, parseContent, getRelayLatest as getRelayLatestForFilter, normalizeURL, currentTime } from "./util/ui.ts";
-import { sleep, fetchRelayInformation, supportedReadRelay, supportedWriteRelay } from "./util/network.ts";
+import { sleep, fetchRelayInformation, supportedReadRelay, supportedWriteRelay, powIsOk } from "./util/network.ts";
 import { nest } from "./util/nest.ts";
 import { store, pool, isDisableType, signersStore } from "./util/stores.ts";
 import { Thread, ellipsisSvg } from "./thread.tsx";
@@ -20,6 +20,18 @@ import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, vote
 import { SubCloser } from "nostr-tools/pool";
 
 const ZapThreads = (props: { [key: string]: string; }) => {
+  const minPow = () => +props.minPow;
+  const maxPow = () => +props.maxPow;
+
+  const updatePow = async () => {
+    const pows = await Promise.all(store.writeRelays.map(async (relayUrl) => {
+      const relayInfo = await find('relayInfos', relayUrl);
+      return relayInfo?.info?.limitation?.min_pow_difficulty || 0;
+    }));
+    store.powDifficulty = Math.max(minPow(), ...pows);
+    console.log('pow', store.powDifficulty);
+  };
+
   createComputed(() => {
     store.anchor = (() => {
       const anchor = props.anchor.trim();
@@ -51,6 +63,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     store.urlPrefixes = parseUrlPrefixes(props.urls);
     store.replyPlaceholder = props.replyPlaceholder;
     store.languages = props.languages.split(',').map(e => e.trim());
+    store.powDifficulty = Math.max(store.powDifficulty, minPow());
   });
 
   const MAX_RELAYS = 32;
@@ -99,9 +112,10 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
     (async () => {
       await sleep(); // Possibly do less interference with warmup
+      // TODO: recompute relays here, perhaps user logged in and changed relays already
       const expiredRelays = sortedRelays.filter(([name, _]) => infoExpired(name)).slice(0, MAX_RELAYS);
       expiredRelays.length > 0 && console.log(`updating relay infos for ${expiredRelays.length} relays`);
-      Promise.allSettled(expiredRelays
+      await Promise.allSettled(expiredRelays
         .map(async ([name, _]) => {
           let info;
           try {
@@ -116,12 +130,14 @@ const ZapThreads = (props: { [key: string]: string; }) => {
             //console.log('failed to fetch relay information', e);
             // TODO: if cors issue or whatever non-200 answer ..., otherwise (time out) — update expiresAt to smaller value (with exp backoff?)
           }
+
           await save('relayInfos', {
             name,
             info,
             lastInfoUpdateAttemptAt: now,
           });
         }));
+      expiredRelays.length > 0 && await updatePow();
     })();
 
     const healthyRelays = sortedRelays
@@ -132,7 +148,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         }
         const probablySupported = infoExpired(name) || (
           (!options.read || supportedReadRelay(relayInfo.info)) &&
-          (!options.write || supportedWriteRelay(eventStub, relayInfo.info))
+          (!options.write || supportedWriteRelay(eventStub, relayInfo.info, maxPow()))
         );
         return probablySupported;
       })
@@ -147,6 +163,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         tryResubscribe();
       });
     }
+    await updatePow();
     console.log(`readRelays=${readRelays} writeRelays=${writeRelays}`);
   };
 
@@ -321,6 +338,9 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     sub = pool.subscribeMany(_relays, [{ ..._filter, kinds, since }],
       {
         onevent(e) {
+          if (!powIsOk(e, store.powDifficulty)) {
+            return;
+          }
           if (e.kind === 1 || e.kind === 9802) {
             if (e.content.trim()) {
               save('events', eventToNoteEvent(e));
@@ -552,6 +572,8 @@ customElement<ZapThreadsAttributes>('zap-threads', {
   'reply-placeholder': "",
   'legacy-url': "",
   languages: '',
+  'min-pow': '',
+  'max-pow': '',
 }, (props) => {
   return <ZapThreads
     anchor={props['anchor'] ?? ''}
@@ -564,11 +586,13 @@ customElement<ZapThreadsAttributes>('zap-threads', {
     replyPlaceholder={props['reply-placeholder'] ?? ''}
     legacyUrl={props['legacy-url'] ?? ''}
     languages={props['languages'] ?? ''}
+    minPow={props['min-pow'] ?? ''}
+    maxPow={props['max-pow'] ?? ''}
   />;
 });
 
 export type ZapThreadsAttributes = {
-  [key in 'anchor' | 'version' | 'relays' | 'user' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'languages']?: string;
+  [key in 'anchor' | 'version' | 'relays' | 'user' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'languages' | 'min-pow' | 'max-pow']?: string;
 } & JSX.HTMLAttributes<HTMLElement>;
 
 export function setLoginCallback(onLogin?: () => Promise<boolean>) {

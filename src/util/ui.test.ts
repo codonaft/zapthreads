@@ -12,6 +12,7 @@ describe("ui utils", () => {
       writeRelays: [],
       filter: {},
       languages: [],
+      powDifficulty: 0,
       profiles: () => [],
       rootEventIds: [],
       topRootEventIds: new Set,

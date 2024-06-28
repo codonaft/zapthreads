@@ -21,6 +21,7 @@ export const store = createMutable<PreferencesStore>({
   threadCollapsed: new Map,
   messageExpanded: new ReactiveSet,
   languages: [],
+  powDifficulty: 0,
   filter: {},
   profiles: () => [],
 });
@@ -58,6 +59,7 @@ export type PreferencesStore = {
   threadCollapsed: Map<Eid, boolean>,
   messageExpanded: ReactiveSet<Eid>,
   languages: string[],
+  powDifficulty: number;
   filter: Filter;  // derived from anchor prop
   externalAuthor?: string; // prop, mostly used with http anchor type
   disableFeatures?: DisableType[]; // prop
