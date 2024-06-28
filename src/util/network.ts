@@ -64,10 +64,19 @@ const publishConcurrently = async <T>(event: Event, relays: string[]): Promise<[
   return [ok, failures];
 };
 
-export const powIsOk = (event: { id: Eid, tags: string[][] }, minPow: number): boolean => {
-  const nonce = event.tags.find(i => i[0] === 'nonce');
-  const powFromNonce = nonce && +nonce[2] || 0;
-  return powFromNonce >= minPow && getPow(event.id) >= minPow;
+export const powIsOk = (id: Eid, powOrTags: number | string[][], minPow: number): boolean => {
+  if (minPow === 0) {
+    return true;
+  }
+
+  let pow = 0;
+  if (typeof powOrTags === 'number') {
+    pow = powOrTags;
+  } else if (typeof powOrTags === 'object') {
+    const nonce = powOrTags.find(t => t.length > 2 && t[0] === 'nonce');
+    pow = nonce && +nonce[2] || 0;
+  }
+  return pow >= minPow && getPow(id) >= minPow;
 };
 
 export const supportedReadRelay = (info?: RelayInformation) => {
@@ -85,7 +94,7 @@ export const supportedReadRelay = (info?: RelayInformation) => {
   return true;
 };
 
-export const supportedWriteRelay = (event: Event, info?: RelayInformation, maxPow?: number) => {
+export const supportedWriteRelay = (event?: Event, info?: RelayInformation, maxWritePow?: number) => {
   if (!info) return true;
   if (!supportedReadRelay(info)) return false;
 
@@ -97,13 +106,14 @@ export const supportedWriteRelay = (event: Event, info?: RelayInformation, maxPo
 
   const retention = info.retention;
   if (retention) {
+    const eventKind = event ? event.kind : 1;
     const allowed = retention.filter(r => {
       const disallowed = (r.time && r.time === 0) || (r.count && r.count === 0);
-      const kindMatches = r.kinds.includes(event.kind);
+      const kindMatches = r.kinds.includes(eventKind);
       const kindRangeMatches = r.kinds
         .filter(r => Array.isArray(r))
         .map(r => r as number[])
-        .map(kindRange => kindRange.length == 2 && event.kind >= kindRange[0] && event.kind <= kindRange[1])
+        .map(kindRange => kindRange.length == 2 && eventKind >= kindRange[0] && eventKind <= kindRange[1])
         .length > 0;
       return disallowed && (kindMatches || kindRangeMatches);
     }).length === 0;
@@ -116,9 +126,9 @@ export const supportedWriteRelay = (event: Event, info?: RelayInformation, maxPo
   if (limitation) {
     if (limitation.auth_required && limitation.auth_required!) return false;
     if (limitation.payment_required && limitation.payment_required!) return false;
-    if (limitation.min_pow_difficulty && ((maxPow && maxPow < limitation.min_pow_difficulty) || (getPow(event.id) < limitation.min_pow_difficulty))) return false;
-    if (limitation.max_content_length && event.content.length > limitation.max_content_length) return false;
-    if (limitation.max_message_length && ('["EVENT",' + JSON.stringify(event) + ']').length > limitation.max_message_length) return false;
+    if (limitation.min_pow_difficulty && ((maxWritePow && maxWritePow < limitation.min_pow_difficulty) || (event && !powIsOk(event.id, event.tags, limitation.min_pow_difficulty)))) return false;
+    if (limitation.max_content_length && event && event.content.length > limitation.max_content_length) return false;
+    if (limitation.max_message_length && event && ('["EVENT",' + JSON.stringify(event) + ']').length > limitation.max_message_length) return false;
   }
 
   return true;
@@ -147,7 +157,7 @@ export const fetchRelayInformation = async (relay: string): Promise<RelayInforma
 
 // TODO: move
 export const sign = async (unsignedEvent: UnsignedEvent, signer: EventSigner) => {
-  const pow = store.powDifficulty;
+  const pow = store.writePowDifficulty;
   let event: Event;
   if (pow > 0) {
     const eventWithPow = minePow(unsignedEvent, pow);

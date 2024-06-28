@@ -22,6 +22,7 @@ export type NoteEvent = {
   t?: string[]; // t tags
   d?: string; // d tag
   tl?: string; // title
+  pow: number;
 };
 
 export type NoteId = string;
@@ -34,6 +35,7 @@ export type ReactionEvent = {
   content: string;
   pk: Pk;
   ts: number;
+  pow: number;
 };
 
 export const voteKind = (r: ReactionEvent): VoteKind => {
@@ -174,6 +176,8 @@ export const eventToNoteEvent = (e: UnsignedEvent & { id?: string; }): NoteEvent
   const d = dTag && dTag[1];
   const titleTag = e.tags.find(t => t[0] === 'title');
   const tl = titleTag && titleTag[1];
+  const nonce = e.tags.find(t => t.length > 2 && t[0] === 'nonce');
+  const pow = nonce && +nonce[2] || 0;
 
   return {
     id: e.id ?? "",
@@ -191,6 +195,7 @@ export const eventToNoteEvent = (e: UnsignedEvent & { id?: string; }): NoteEvent
     t,
     d,
     tl,
+    pow,
   };
 };
 
@@ -205,6 +210,8 @@ export const eventToReactionEvent = (e: UnsignedEvent & { id?: string; }): React
     .concat(tags.filter(t => t[3] === 'root'))
     .map(t => t[1])
     .concat([eTags[0][1]])[0];
+  const nonce = e.tags.find(t => t.length > 2 && t[0] === 'nonce');
+  const pow = nonce && +nonce[2] || 0;
 
   return {
     eid: e.id ?? '',
@@ -212,5 +219,6 @@ export const eventToReactionEvent = (e: UnsignedEvent & { id?: string; }): React
     pk: e.pubkey,
     content: e.content,
     ts: e.created_at,
+    pow,
   };
 }

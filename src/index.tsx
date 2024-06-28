@@ -10,7 +10,7 @@ import { store, pool, isDisableType, signersStore } from "./util/stores.ts";
 import { Thread, ellipsisSvg } from "./thread.tsx";
 import { RootComment } from "./reply.tsx";
 import { decode as bolt11Decode } from "light-bolt11-decoder";
-import { clear as clearCache, find, findAll, save, watchAll } from "./util/db.ts";
+import { clear as clearCache, find, findAll, save, remove, watchAll } from "./util/db.ts";
 import { decode } from "nostr-tools/nip19";
 import { RelayRecord } from "nostr-tools/relay";
 import { Event } from "nostr-tools/core";
@@ -20,16 +20,22 @@ import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, vote
 import { SubCloser } from "nostr-tools/pool";
 
 const ZapThreads = (props: { [key: string]: string; }) => {
-  const minPow = () => +props.minPow;
-  const maxPow = () => +props.maxPow;
+  const minReadPow = () => +props.minReadPow;
+  const maxWritePow = () => +props.maxWritePow;
 
-  const updatePow = async () => {
-    const pows = await Promise.all(store.writeRelays.map(async (relayUrl) => {
+  const updateWritePow = async () => {
+    const readRelaysCanValidatePow = await Promise.all(store.readRelays.map(async (relayUrl) => {
+      const relayInfo = await find('relayInfos', relayUrl);
+      return relayInfo && relayInfo.info && relayInfo.info.limitation && relayInfo.info.limitation.min_pow_difficulty &&
+        relayInfo.info.supported_nips.includes(13) && relayInfo.info.limitation.min_pow_difficulty >= minReadPow();
+    }));
+    store.validateReadPow = readRelaysCanValidatePow.filter(i => !i).length > 0;
+
+    const writeRelaysPows = await Promise.all(store.writeRelays.map(async (relayUrl) => {
       const relayInfo = await find('relayInfos', relayUrl);
       return relayInfo?.info?.limitation?.min_pow_difficulty || 0;
     }));
-    store.powDifficulty = Math.max(minPow(), ...pows);
-    console.log('pow', store.powDifficulty);
+    store.writePowDifficulty = Math.max(minReadPow(), ...writeRelaysPows);
   };
 
   createComputed(() => {
@@ -63,7 +69,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     store.urlPrefixes = parseUrlPrefixes(props.urls);
     store.replyPlaceholder = props.replyPlaceholder;
     store.languages = props.languages.split(',').map(e => e.trim());
-    store.powDifficulty = Math.max(store.powDifficulty, minPow());
+    store.writePowDifficulty = Math.max(store.writePowDifficulty, minReadPow());
   });
 
   const MAX_RELAYS = 32;
@@ -97,15 +103,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
        .filter(([name, options]) => name.length > 0)
        .map(([name, options]) => [new URL(name).toString(), options]));
 
-    const eventStub: Event = {
-      kind: 1,
-      tags: [],
-      content: '',
-      created_at: 0,
-      pubkey: '',
-      id: '',
-      sig: '',
-    };
     const sortedRelays = Object
       .entries(relays)
       .sort(([a, _a], [b, _b]) => a.localeCompare(b));
@@ -123,7 +120,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
             // ensure server returned something parsable
             supportedReadRelay(possibleInfo);
-            supportedWriteRelay(eventStub, possibleInfo);
+            supportedWriteRelay(undefined, possibleInfo, undefined);
 
             info = possibleInfo;
           } catch (e) {
@@ -137,7 +134,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
             lastInfoUpdateAttemptAt: now,
           });
         }));
-      expiredRelays.length > 0 && await updatePow();
+      expiredRelays.length > 0 && await updateWritePow();
     })();
 
     const healthyRelays = sortedRelays
@@ -148,7 +145,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         }
         const probablySupported = infoExpired(name) || (
           (!options.read || supportedReadRelay(relayInfo.info)) &&
-          (!options.write || supportedWriteRelay(eventStub, relayInfo.info, maxPow()))
+          (!options.write || supportedWriteRelay(undefined, relayInfo.info, maxWritePow()))
         );
         return probablySupported;
       })
@@ -163,7 +160,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         tryResubscribe();
       });
     }
-    await updatePow();
+    await updateWritePow();
     console.log(`readRelays=${readRelays} writeRelays=${writeRelays}`);
   };
 
@@ -338,8 +335,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     sub = pool.subscribeMany(_readRelays, [{ ..._filter, kinds, since }],
       {
         onevent(e) {
-          if (!powIsOk(e, store.powDifficulty)) {
-            // TODO: remove spam if it's still in the db
+          if (store.validateReadPow && !powIsOk(e.id, e.tags, minReadPow())) {
             return;
           }
           if (e.kind === 1 || e.kind === 9802) {
@@ -483,7 +479,13 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         return () => [];
     }
   });
-  const events = () => eventsWatcher()();
+  const events = () => eventsWatcher()().filter(e => {
+    if (store.validateReadPow && !powIsOk(e.id, e.pow, minReadPow())) {
+      remove('events', [e.id]);
+      return false;
+    }
+    return true;
+  });
 
   const nestedEvents = createMemo(() => {
     if (store.rootEventIds && store.rootEventIds.length) {
@@ -517,7 +519,13 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   const firstLevelComments = () => nestedEvents().filter(n => !n.parent).length;
 
   const reactions = watchAll(() => ['reactions']);
-  const votes = () => reactions().filter(r => voteKind(r) !== 0);
+  const votes = createMemo(() => reactions().filter(r => {
+    if (store.validateReadPow && !powIsOk(r.eid, r.pow, minReadPow())) {
+      remove('reactions', [r.eid]);
+      return false;
+    }
+    return voteKind(r) !== 0;
+  }));
 
   let rootElement: HTMLDivElement | undefined;
   const visible = createVisibilityObserver({ threshold: 0.0 })(() => rootElement);
@@ -573,8 +581,8 @@ customElement<ZapThreadsAttributes>('zap-threads', {
   'reply-placeholder': "",
   'legacy-url': "",
   languages: '',
-  'min-pow': '',
-  'max-pow': '',
+  'min-read-pow': '',
+  'max-write-pow': '',
 }, (props) => {
   return <ZapThreads
     anchor={props['anchor'] ?? ''}
@@ -587,13 +595,13 @@ customElement<ZapThreadsAttributes>('zap-threads', {
     replyPlaceholder={props['reply-placeholder'] ?? ''}
     legacyUrl={props['legacy-url'] ?? ''}
     languages={props['languages'] ?? ''}
-    minPow={props['min-pow'] ?? ''}
-    maxPow={props['max-pow'] ?? ''}
+    minReadPow={props['min-read-pow'] ?? ''}
+    maxWritePow={props['max-write-pow'] ?? ''}
   />;
 });
 
 export type ZapThreadsAttributes = {
-  [key in 'anchor' | 'version' | 'read-relays' | 'user' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'languages' | 'min-pow' | 'max-pow']?: string;
+  [key in 'anchor' | 'version' | 'read-relays' | 'user' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'languages' | 'min-read-pow' | 'max-write-pow']?: string;
 } & JSX.HTMLAttributes<HTMLElement>;
 
 export function setLoginCallback(onLogin?: () => Promise<boolean>) {

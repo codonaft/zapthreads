@@ -69,7 +69,14 @@ Arguments:
    - defaults to `naddr:nostr.com/,npub:nostr.com/,nprofile:nostr.com/,nevent:nostr.com/,note:nostr.com/,tag:snort.social/t/`
    - `https://` will be automatically prepended
  - `languages`: comma-separated string of allowed languages, no restrictions by default
- - `min-pow` and `max-pow` (boundaries of difficulty that define how warmer we make our planet while desperately fighting spam, disabled by default)
+   - ignores relays with unsupported languages
+ - `min-read-pow` and `max-write-pow`: difficulty boundaries that determine how warm we make our planet while desperately fighting spam, `0` by default
+   - ignores events sent with difficulty less than `min-read-pow`
+     - difficulty validation is done on client if any read relay doesn't implement NIP-13 or doesn't have required difficulty limitation
+   - write pow difficulty is determined as maximum of
+     - `min-read-pow`
+     - current minimal pow of write relays limitations, bounded by `max-write-pow`
+   - `anchor` difficulty is ignored, it can be `0`
 
 ```html
 <zap-threads 
@@ -99,6 +106,14 @@ For more advanced CSS control via `shadowRoot`:
 const style = document.createElement('style');
 style.innerHTML = '#ztr-root { font-size: 12em; }';
 document.querySelector('zap-threads').shadowRoot.appendChild(style);
+```
+
+### Callbacks
+```js
+ZapThreads.setLoginCallback(async () => {
+  // show some dialog here, etc.
+  return true; // user accepted rules
+})
 ```
 
 ## Development
