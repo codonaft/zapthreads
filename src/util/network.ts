@@ -5,7 +5,7 @@ import { RelayInformation, fetchRelayInformation as internalFetchRelayInformatio
 import { getPow, minePow } from "nostr-tools/nip13";
 import { npubEncode } from "nostr-tools/nip19";
 import { findAll } from "./db.ts";
-import { EventSigner, store } from "./stores.ts";
+import { EventSigner, store, pool } from "./stores.ts";
 import { Eid, RelayInfo } from "./models.ts";
 
 const TIMEOUT = 7000;
@@ -28,14 +28,20 @@ const timeLimit = async <T>(fn: () => Promise<T>, timeout: number = TIMEOUT) => 
   }
 };
 
+const publishOnRelay = async (relayUrl: string, event: Event) => {
+  // @ts-ignore
+  let relay = pool.relays.get(relayUrl);
+  if (!relay) {
+    relay = await Relay.connect(relayUrl);
+  }
+  await relay.publish(event);
+};
+
 const publishSequentially = async (event: Event, relays: string[]): Promise<[number, any[]]> => {
   const failures = [];
   for (const relayUrl of relays) {
     try {
-      await timeLimit(async () => {
-        const relay = await Relay.connect(relayUrl);
-        await relay.publish(event);
-      });
+      await timeLimit(async () => publishOnRelay(relayUrl, event));
     } catch (e) {
       failures.push([relayUrl, e]);
     }
@@ -47,10 +53,7 @@ const publishSequentially = async (event: Event, relays: string[]): Promise<[num
 
 const publishConcurrently = async <T>(event: Event, relays: string[]): Promise<[number, any[]]> => {
   const results = await Promise.allSettled(relays.map(async (relayUrl: string) =>
-    timeLimit(async () => {
-      const relay = await Relay.connect(relayUrl);
-      await relay.publish(event);
-    })
+    timeLimit(async () => await publishOnRelay(relayUrl, event))
   ));
 
   let ok = 0;
