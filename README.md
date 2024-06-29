@@ -110,10 +110,11 @@ document.querySelector('zap-threads').shadowRoot.appendChild(style);
 
 ### Callbacks
 ```js
-ZapThreads.setLoginCallback(async () => {
-  // show some dialog here, etc.
-  return true; // user accepted rules
-})
+ZapThreads
+  .onLogin(async () => {
+    // show some dialog here, etc.
+    return true; // user accepted rules
+  })
 ```
 
 ## Development
