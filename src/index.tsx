@@ -11,12 +11,12 @@ import { Thread, ellipsisSvg } from "./thread.tsx";
 import { RootComment } from "./reply.tsx";
 import { decode as bolt11Decode } from "light-bolt11-decoder";
 import { clear as clearCache, find, findAll, save, remove, watchAll } from "./util/db.ts";
-import { decode } from "nostr-tools/nip19";
+import { decode, npubEncode } from "nostr-tools/nip19";
 import { RelayRecord } from "nostr-tools/relay";
 import { Event } from "nostr-tools/core";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { Filter } from "nostr-tools/filter";
-import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, RelayInfo, Eid } from "./util/models.ts";
+import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, RelayInfo, Eid, Pk } from "./util/models.ts";
 import { SubCloser } from "nostr-tools/pool";
 
 const ZapThreads = (props: { [key: string]: string; }) => {
@@ -335,25 +335,29 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     sub = pool.subscribeMany(_readRelays, [{ ..._filter, kinds, since }],
       {
         onevent(e) {
-          if (store.validateReadPow && !powIsOk(e.id, e.tags, minReadPow())) {
-            return;
-          }
-          if (e.kind === 1 || e.kind === 9802) {
-            if (e.content.trim()) {
-              save('events', eventToNoteEvent(e));
-            }
-          } else if (e.kind === 7) {
-            newLikeIds.add(e.id);
-            if (e.content.trim()) {
-              const reactionEvent = eventToReactionEvent(e);
-              if (voteKind(reactionEvent) !== 0) { // remove this condition if you want to track all reactions
-                save('reactions', reactionEvent);
+          (async () => {
+            if (store.validatedEvents.has(e.id) && !store.validatedEvents.get(e.id)!) return;
+            if (store.validateReadPow && !powIsOk(e.id, e.tags, minReadPow())) return;
+            if (store.onReceive && !(await store.onReceive(e.id, npubEncode(e.pubkey), e.kind, e.content))) return;
+            store.validatedEvents.set(e.id, true);
+
+            if (e.kind === 1 || e.kind === 9802) {
+              if (e.content.trim()) {
+                save('events', eventToNoteEvent(e));
               }
+            } else if (e.kind === 7) {
+              newLikeIds.add(e.id);
+              if (e.content.trim()) {
+                const reactionEvent = eventToReactionEvent(e);
+                if (voteKind(reactionEvent) !== 0) { // remove this condition if you want to track all reactions
+                  save('reactions', reactionEvent);
+                }
+              }
+            } else if (e.kind === 9735) {
+              const invoiceTag = e.tags.find(t => t[0] === "bolt11");
+              invoiceTag && invoiceTag[1] && (newZaps[e.id] = invoiceTag[1]);
             }
-          } else if (e.kind === 9735) {
-            const invoiceTag = e.tags.find(t => t[0] === "bolt11");
-            invoiceTag && invoiceTag[1] && (newZaps[e.id] = invoiceTag[1]);
-          }
+          })()
         },
         oneose() {
           (async () => {
@@ -480,10 +484,26 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     }
   });
   const events = () => eventsWatcher()().filter(e => {
+    if (store.validatedEvents.has(e.id)) {
+      return store.validatedEvents.get(e.id);
+    }
+
+    if (store.onReceive) {
+      // FIXME: user might observe a removed event for a while
+      (async () => {
+        if (!(await store.onReceive!(e.id, npubEncode(e.pk), e.k, e.c))) {
+          remove('events', [e.id]);
+          store.validatedEvents.set(e.id, false);
+        }
+      })();
+    }
     if (store.validateReadPow && !powIsOk(e.id, e.pow, minReadPow())) {
       remove('events', [e.id]);
+      store.validatedEvents.set(e.id, false);
       return false;
     }
+
+    store.validatedEvents.set(e.id, true);
     return true;
   });
 
@@ -520,10 +540,26 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
   const reactions = watchAll(() => ['reactions']);
   const votes = createMemo(() => reactions().filter(r => {
+    if (store.validatedEvents.has(r.eid)) {
+      return store.validatedEvents.get(r.eid);
+    }
+
+    if (store.onReceive) {
+      // FIXME: user might observe a removed event for a while
+      (async () => {
+        if (!(await store.onReceive!(r.eid, npubEncode(r.pk), 7, r.content))) {
+          await remove('reactions', [r.eid]);
+          store.validatedEvents.set(r.eid, false);
+        }
+      })();
+    }
     if (store.validateReadPow && !powIsOk(r.eid, r.pow, minReadPow())) {
       remove('reactions', [r.eid]);
+      store.validatedEvents.set(r.eid, false);
       return false;
     }
+    store.validatedEvents.set(r.eid, true);
+
     return voteKind(r) !== 0;
   }));
 
@@ -606,5 +642,15 @@ export type ZapThreadsAttributes = {
 
 ZapThreads.onLogin = function (cb?: () => Promise<boolean>) {
   store.onLogin = cb;
+  return ZapThreads;
+};
+
+ZapThreads.onPublish = function (cb?: (id: Eid, npub: string, kind: number, content: string) => Promise<boolean>) {
+  store.onPublish = cb;
+  return ZapThreads;
+};
+
+ZapThreads.onReceive = function (cb?: (id: Eid, npub: string, kind: number, content: string) => Promise<boolean>) {
+  store.onReceive = cb;
   return ZapThreads;
 };

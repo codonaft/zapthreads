@@ -3,6 +3,7 @@ import { getEventHash } from "nostr-tools/pure";
 import { Relay } from "nostr-tools/relay";
 import { RelayInformation, fetchRelayInformation as internalFetchRelayInformation } from "nostr-tools/nip11";
 import { getPow, minePow } from "nostr-tools/nip13";
+import { npubEncode } from "nostr-tools/nip19";
 import { findAll } from "./db.ts";
 import { EventSigner, store } from "./stores.ts";
 import { Eid, RelayInfo } from "./models.ts";
@@ -135,6 +136,10 @@ export const supportedWriteRelay = (event?: Event, info?: RelayInformation, maxW
 };
 
 export const publishEvent = async (event: Event): Promise<[number, number]> => {
+  if (store.onPublish && !(await store.onPublish(event.id, npubEncode(event.pubkey), event.kind, event.content))) {
+    return [0, 0];
+  }
+
   //publishAttempt += 1;
   const writeRelays = store.writeRelays;
   const relayInfos: { [name: string]: RelayInfo } = Object.fromEntries((await findAll('relayInfos')).map((r: RelayInfo) => [r.name, r])); // TODO: extract? find single item?

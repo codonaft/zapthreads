@@ -12,6 +12,7 @@ describe("ui utils", () => {
       writeRelays: [],
       filter: {},
       languages: [],
+      validatedEvents: new Map,
       validateReadPow: true,
       writePowDifficulty: 0,
       profiles: () => [],

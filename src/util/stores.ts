@@ -1,4 +1,5 @@
 import { ReactiveSet } from "@solid-primitives/set";
+import { Event } from "nostr-tools/core";
 import { UnsignedEvent } from "nostr-tools/pure";
 import { SimplePool } from "nostr-tools/pool";
 import { Filter } from "nostr-tools/filter";
@@ -21,6 +22,7 @@ export const store = createMutable<PreferencesStore>({
   threadCollapsed: new Map,
   messageExpanded: new ReactiveSet,
   languages: [],
+  validatedEvents: new Map,
   validateReadPow: true,
   writePowDifficulty: 0,
   filter: {},
@@ -60,6 +62,7 @@ export type PreferencesStore = {
   threadCollapsed: Map<Eid, boolean>,
   messageExpanded: ReactiveSet<Eid>,
   languages: string[],
+  validatedEvents: Map<Eid, boolean>,
   validateReadPow: boolean,
   writePowDifficulty: number;
   filter: Filter;  // derived from anchor prop
@@ -71,6 +74,8 @@ export type PreferencesStore = {
   anchorAuthor?: string;
   profiles: () => Profile[];
   onLogin?: () => Promise<boolean>;
+  onPublish?: (id: Eid, npub: string, kind: number, content: string) => Promise<boolean>;
+  onReceive?: (id: Eid, npub: string, kind: number, content: string) => Promise<boolean>;
 };
 
 export type Anchor = { type: 'http' | 'naddr' | 'note' | 'error', value: string; };
