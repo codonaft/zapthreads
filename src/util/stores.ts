@@ -22,6 +22,7 @@ export const store = createMutable<PreferencesStore>({
   threadCollapsed: new Map,
   messageExpanded: new ReactiveSet,
   languages: [],
+  maxCommentLength: 0,
   validatedEvents: new Map,
   validateReadPow: true,
   writePowDifficulty: 0,
@@ -62,6 +63,7 @@ export type PreferencesStore = {
   threadCollapsed: Map<Eid, boolean>,
   messageExpanded: ReactiveSet<Eid>,
   languages: string[],
+  maxCommentLength: number,
   validatedEvents: Map<Eid, boolean>,
   validateReadPow: boolean,
   writePowDifficulty: number;

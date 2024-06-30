@@ -382,6 +382,10 @@ li.ztr-comment-action-votes {
   resize: vertical;
 }
 
+.ztr-reply-form textarea.too-long {
+  border: 2px solid rgb(202, 23, 23);
+}
+
 .ztr-reply-form:disabled {
   opacity: 65%;
   user-select: none;

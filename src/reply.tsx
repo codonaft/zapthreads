@@ -7,7 +7,7 @@ import { generateSecretKey, getPublicKey, getEventHash, finalizeEvent } from "no
 import { createAutofocus } from "@solid-primitives/autofocus";
 import { find, save, watch } from "./util/db.ts";
 import { Profile, eventToNoteEvent } from "./util/models.ts";
-import { lightningSvg, likeSvg, nostrSvg } from "./thread.tsx";
+import { lightningSvg, likeSvg, nostrSvg, warningSvg } from "./thread.tsx";
 import { decode, npubEncode } from "nostr-tools/nip19";
 import { Relay } from "nostr-tools/relay";
 import { normalizeURL } from "nostr-tools/utils";
@@ -202,6 +202,9 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
   let ref!: HTMLTextAreaElement;
   createAutofocus(() => autofocus && ref);
 
+  const maxCommentLength = () => store.maxCommentLength;
+  const tooLong = () => comment().length > maxCommentLength();
+
   return <div class="ztr-reply-form">
     <textarea
       disabled={loading()}
@@ -209,8 +212,10 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
       placeholder={store.replyPlaceholder || 'Add your comment...'}
       autofocus={autofocus}
       ref={ref}
-      onChange={e => setComment(e.target.value)}
+      onInput={e => setComment(e.target.value)}
+      classList={{'too-long': tooLong()}}
     />
+      {comment().length > 0.98 * maxCommentLength() && <span classList={{'ztr-reply-error': tooLong()}}>{warningSvg()} Comment is limited to {maxCommentLength()} characters; you entered {comment().length}.</span>}
     <div class="ztr-reply-controls">
       {store.disableFeatures!.includes('publish') && <span>Publishing is disabled</span>}
       {errorMessage() && <span class="ztr-reply-error">Error: {errorMessage()}</span>}
@@ -226,7 +231,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
       </Show>
 
       {loggedInUser() &&
-        <button disabled={loading()} class="ztr-reply-button" onClick={() => publish(loggedInUser())}>
+        <button disabled={loading() || tooLong()} class="ztr-reply-button" onClick={() => publish(loggedInUser())}>
           Reply as {loggedInUser()!.n || shortenEncodedId(npubEncode(loggedInUser()!.pk))}
         </button>}
 

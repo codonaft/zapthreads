@@ -70,6 +70,7 @@ Arguments:
    - `https://` will be automatically prepended
  - `languages`: comma-separated string of allowed languages, no restrictions by default
    - ignores relays with unsupported languages
+ - `max-comment-length`: limit comment length, disabled by default
  - `min-read-pow` and `max-write-pow`: difficulty boundaries that determine how warm we make our planet while desperately fighting spam, `0` by default
    - ignores events sent with difficulty less than `min-read-pow`
      - difficulty validation is done on client if any read relay doesn't implement NIP-13 or doesn't have required difficulty limitation
