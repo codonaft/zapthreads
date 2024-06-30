@@ -209,7 +209,7 @@ export const eventToReactionEvent = (e: UnsignedEvent & { id?: string; }): React
     .filter(t => t[3] === 'reply')
     .concat(tags.filter(t => t[3] === 'root'))
     .map(t => t[1])
-    .concat([eTags[0][1]])[0];
+    .concat(eTags.length > 0 && eTags[0].length > 1 && [eTags[0][1]] || [])[0];
   const nonce = e.tags.find(t => t.length > 2 && t[0] === 'nonce');
   const pow = nonce && +nonce[2] || 0;
 

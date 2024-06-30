@@ -116,10 +116,10 @@ ZapThreads
     // show some dialog here, etc.
     return true; // user accepted rules
   })
-  .onPublish(async (id, npub, kind, content) => {
+  .onPublish(async (id, kind, content) => {
     return (kind === 1 || kind === 7) && content.length < 1000;
   })
-  .onReceive(async (id, npub, kind, content) => {
+  .onReceive(async (id, kind, content) => {
     return (kind === 1 || kind === 7) && content.length < 1000;
   })
 ```

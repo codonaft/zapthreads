@@ -139,7 +139,7 @@ export const supportedWriteRelay = (event?: Event, info?: RelayInformation, maxW
 };
 
 export const publishEvent = async (event: Event): Promise<[number, number]> => {
-  if (store.onPublish && !(await store.onPublish(event.id, npubEncode(event.pubkey), event.kind, event.content))) {
+  if (store.onPublish && !(await store.onPublish(event.id, event.kind, event.content))) {
     return [0, 0];
   }
 

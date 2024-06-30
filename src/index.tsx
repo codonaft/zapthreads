@@ -77,17 +77,51 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   const rawReadRelays = () => props.readRelays;
   const [trackResubscribe, tryResubscribe] = createTrigger();
 
+  const WEEK = 7*24*60*60;
+  const TEN_MINS = 10*60;
+  const infoExpired = (now: number, relayInfo?: RelayInfo) => {
+    const lastInfoUpdateAttemptAt = relayInfo && relayInfo.lastInfoUpdateAttemptAt;
+    return !lastInfoUpdateAttemptAt || now > lastInfoUpdateAttemptAt + (relayInfo.info ? TEN_MINS : WEEK); // TODO: always week, until unavailable + !info?
+  };
+
+  const updateRelayInfos = async () => {
+    const now = currentTime();
+    const expiredRelays = [];
+    for (const relayUrl of new Set([...store.readRelays, ...store.writeRelays])) {
+      const relayInfo = await find('relayInfos', relayUrl);
+      if (infoExpired(now, relayInfo)) {
+        expiredRelays.push(relayUrl);
+      }
+    }
+    if (expiredRelays.length === 0) return;
+    console.log(`[zapthreads] updating relay infos for ${expiredRelays.length} relays`);
+    await Promise.allSettled(expiredRelays
+      .map(async (relayUrl) => {
+        let info;
+        try {
+          const possibleInfo = await fetchRelayInformation(relayUrl);
+
+          // ensure server returned something parsable
+          supportedReadRelay(possibleInfo);
+          supportedWriteRelay(undefined, possibleInfo, undefined);
+
+          info = possibleInfo;
+        } catch (e) {
+          //console.log('failed to fetch relay information', e);
+          // TODO: if cors issue or whatever non-200 answer ..., otherwise (time out) — update expiresAt to smaller value (with exp backoff?)
+        }
+
+        await save('relayInfos', {
+          name: relayUrl,
+          info,
+          lastInfoUpdateAttemptAt: now,
+        });
+      }));
+    await updateWritePow();
+  };
+
   const updateRelays = async () => {
     const now = currentTime();
-    const week = 7*24*60*60;
-    const tenMins = 10*60;
-
-    const relayInfos: { [name: string]: RelayInfo } = Object.fromEntries((await findAll('relayInfos')).map((r: RelayInfo) => [r.name, r]));
-    const infoExpired = (name: string) => {
-      const relayInfo = relayInfos[name];
-      const lastInfoUpdateAttemptAt = relayInfo && relayInfo.lastInfoUpdateAttemptAt;
-      return !lastInfoUpdateAttemptAt || now > lastInfoUpdateAttemptAt + (relayInfo.info ? tenMins : week); // TODO: always week, until unavailable + !info?
-    };
 
     const rawRelays: RelayRecord =
       signersStore.active && window.nostr
@@ -100,59 +134,28 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     const relays: RelayRecord = Object.fromEntries(
       Object
        .entries(rawRelays)
-       .map(([name, options]: [string, any]) => [name.trim(), options])
-       .filter(([name, options]) => name.length > 0)
-       .map(([name, options]) => [new URL(name).toString(), options]));
+       .map(([relayUrl, options]: [string, any]) => [relayUrl.trim(), options])
+       .filter(([relayUrl, options]) => relayUrl.length > 0)
+       .map(([relayUrl, options]) => [new URL(relayUrl).toString(), options]));
 
     const sortedRelays = Object
       .entries(relays)
       .sort(([a, _a], [b, _b]) => a.localeCompare(b));
 
-    (async () => {
-      await sleep(); // Possibly do less interference with warmup
-      // TODO: recompute relays here, perhaps user logged in and changed relays already
-      const expiredRelays = sortedRelays.filter(([name, _]) => infoExpired(name)).slice(0, MAX_RELAYS);
-      expiredRelays.length > 0 && console.log(`updating relay infos for ${expiredRelays.length} relays`);
-      await Promise.allSettled(expiredRelays
-        .map(async ([name, _]) => {
-          let info;
-          try {
-            const possibleInfo = await fetchRelayInformation(name);
-
-            // ensure server returned something parsable
-            supportedReadRelay(possibleInfo);
-            supportedWriteRelay(undefined, possibleInfo, undefined);
-
-            info = possibleInfo;
-          } catch (e) {
-            //console.log('failed to fetch relay information', e);
-            // TODO: if cors issue or whatever non-200 answer ..., otherwise (time out) — update expiresAt to smaller value (with exp backoff?)
-          }
-
-          await save('relayInfos', {
-            name,
-            info,
-            lastInfoUpdateAttemptAt: now,
-          });
-        }));
-      expiredRelays.length > 0 && await updateWritePow();
-    })();
-
-    const healthyRelays = sortedRelays
-      .filter(([name, options]) => {
-        const relayInfo = relayInfos[name];
-        if (!relayInfo) {
-          return true;
-        }
-        const probablySupported = infoExpired(name) || (
-          (!options.read || supportedReadRelay(relayInfo.info)) &&
-          (!options.write || supportedWriteRelay(undefined, relayInfo.info, maxWritePow()))
-        );
-        return probablySupported;
-      })
-      .slice(0, MAX_RELAYS);
-    const readRelays = healthyRelays.filter(([name, options]) => options.read).map(([r, _]) => r);
-    const writeRelays = healthyRelays.filter(([name, options]) => options.write).map(([r, _]) => r);
+    const healthyRelays: [string, {read: boolean; write: boolean}][] = [];
+    for (const [relayUrl, options] of sortedRelays) {
+      if (healthyRelays.length >= MAX_RELAYS) break;
+      const relayInfo = await find('relayInfos', relayUrl);
+      const probablySupported = infoExpired(now, relayInfo) || (
+        (!options.read || supportedReadRelay(relayInfo!.info)) &&
+        (!options.write || supportedWriteRelay(undefined, relayInfo!.info, maxWritePow()))
+      );
+      if (probablySupported) {
+        healthyRelays.push([relayUrl, options]);
+      }
+    }
+    const readRelays = healthyRelays.filter(([relayUrl, options]) => options.read).map(([r, _]) => r);
+    const writeRelays = healthyRelays.filter(([relayUrl, options]) => options.write).map(([r, _]) => r);
 
     store.writeRelays = writeRelays;
     if (JSON.stringify(store.readRelays) !== JSON.stringify(readRelays)) {
@@ -291,6 +294,18 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     return store.filter;
   }, { defer: true });
 
+  const validEvent = async (id: string, powOrTags: number | string[][], kind: number, content: string) => {
+    if (store.validatedEvents.has(id)) {
+      return store.validatedEvents.get(id)!;
+    }
+    const valid =
+      (content.length <= store.maxCommentLength) &&
+      (!store.validateReadPow || powIsOk(id, powOrTags, minReadPow())) &&
+      (!store.onReceive || (await store.onReceive(id, kind, content)));
+    store.validatedEvents.set(id, valid);
+    return valid;
+  };
+
   let sub: SubCloser | null;
 
   // Filter -> remote events, content
@@ -337,21 +352,25 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       {
         onevent(e) {
           (async () => {
-            if (store.validatedEvents.has(e.id) && !store.validatedEvents.get(e.id)!) return;
-            if ((e.content.length > store.maxCommentLength) || (store.validateReadPow && !powIsOk(e.id, e.tags, minReadPow()))) return;
-            if (store.onReceive && !(await store.onReceive(e.id, npubEncode(e.pubkey), e.kind, e.content))) return;
-            store.validatedEvents.set(e.id, true);
-
+            const valid = await validEvent(e.id, e.tags, e.kind, e.content);
             if (e.kind === 1 || e.kind === 9802) {
               if (e.content.trim()) {
-                save('events', eventToNoteEvent(e));
+                if (valid) {
+                  save('events', eventToNoteEvent(e));
+                } else {
+                  remove('events', [e.id]);
+                }
               }
             } else if (e.kind === 7) {
               newLikeIds.add(e.id);
               if (e.content.trim()) {
                 const reactionEvent = eventToReactionEvent(e);
                 if (voteKind(reactionEvent) !== 0) { // remove this condition if you want to track all reactions
-                  save('reactions', reactionEvent);
+                  if (valid) {
+                    save('reactions', reactionEvent);
+                  } else {
+                    remove('reactions', [e.id]);
+                  }
                 }
               }
             } else if (e.kind === 9735) {
@@ -379,6 +398,9 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
             zapsAggregate.ids = [...new Set([...zapsAggregate.ids, ...Object.keys(newZaps)])];
             save('aggregates', zapsAggregate);
+
+            await updateRelayInfos();
+            // TODO: remove the rest of invalid messages
           })();
 
           setTimeout(async () => {
@@ -484,29 +506,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         return () => [];
     }
   });
-  const events = () => eventsWatcher()().filter(e => {
-    if (store.validatedEvents.has(e.id)) {
-      return store.validatedEvents.get(e.id);
-    }
-
-    if (store.onReceive) {
-      // FIXME: user might observe a removed event for a while
-      (async () => {
-        if (!(await store.onReceive!(e.id, npubEncode(e.pk), e.k, e.c))) {
-          remove('events', [e.id]);
-          store.validatedEvents.set(e.id, false);
-        }
-      })();
-    }
-    if ((e.c.length > store.maxCommentLength) || (store.validateReadPow && !powIsOk(e.id, e.pow, minReadPow()))) {
-      remove('events', [e.id]);
-      store.validatedEvents.set(e.id, false);
-      return false;
-    }
-
-    store.validatedEvents.set(e.id, true);
-    return true;
-  });
+  const events = () => eventsWatcher()();
 
   const nestedEvents = createMemo(() => {
     if (store.rootEventIds && store.rootEventIds.length) {
@@ -540,29 +540,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   const firstLevelComments = () => nestedEvents().filter(n => !n.parent).length;
 
   const reactions = watchAll(() => ['reactions']);
-  const votes = createMemo(() => reactions().filter(r => {
-    if (store.validatedEvents.has(r.eid)) {
-      return store.validatedEvents.get(r.eid);
-    }
-
-    if (store.onReceive) {
-      // FIXME: user might observe a removed event for a while
-      (async () => {
-        if (!(await store.onReceive!(r.eid, npubEncode(r.pk), 7, r.content))) {
-          await remove('reactions', [r.eid]);
-          store.validatedEvents.set(r.eid, false);
-        }
-      })();
-    }
-    if (store.validateReadPow && !powIsOk(r.eid, r.pow, minReadPow())) {
-      remove('reactions', [r.eid]);
-      store.validatedEvents.set(r.eid, false);
-      return false;
-    }
-    store.validatedEvents.set(r.eid, true);
-
-    return voteKind(r) !== 0;
-  }));
+  const votes = createMemo(() => reactions().filter(r => voteKind(r) !== 0 && (!store.validatedEvents.has(r.eid) || store.validatedEvents.get(r.eid))));
 
   let rootElement: HTMLDivElement | undefined;
   const visible = createVisibilityObserver({ threshold: 0.0 })(() => rootElement);
@@ -648,12 +626,12 @@ ZapThreads.onLogin = function (cb?: () => Promise<boolean>) {
   return ZapThreads;
 };
 
-ZapThreads.onPublish = function (cb?: (id: Eid, npub: string, kind: number, content: string) => Promise<boolean>) {
+ZapThreads.onPublish = function (cb?: (id: Eid, kind: number, content: string) => Promise<boolean>) {
   store.onPublish = cb;
   return ZapThreads;
 };
 
-ZapThreads.onReceive = function (cb?: (id: Eid, npub: string, kind: number, content: string) => Promise<boolean>) {
+ZapThreads.onReceive = function (cb?: (id: Eid, kind: number, content: string) => Promise<boolean>) {
   store.onReceive = cb;
   return ZapThreads;
 };

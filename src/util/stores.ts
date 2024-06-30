@@ -76,8 +76,8 @@ export type PreferencesStore = {
   anchorAuthor?: string;
   profiles: () => Profile[];
   onLogin?: () => Promise<boolean>;
-  onPublish?: (id: Eid, npub: string, kind: number, content: string) => Promise<boolean>;
-  onReceive?: (id: Eid, npub: string, kind: number, content: string) => Promise<boolean>;
+  onPublish?: (id: Eid, kind: number, content: string) => Promise<boolean>;
+  onReceive?: (id: Eid, kind: number, content: string) => Promise<boolean>;
 };
 
 export type Anchor = { type: 'http' | 'naddr' | 'note' | 'error', value: string; };

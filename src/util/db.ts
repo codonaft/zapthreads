@@ -21,7 +21,7 @@ const db = async () => {
     if (!__db) {
       __db = await openDB<ZapthreadsSchema>('zapthreads', 2, { upgrade });
 
-      __db.addEventListener('close', (event) => {
+      /*__db.addEventListener('close', (event) => {
         console.log('closed database');
         location.reload();
       }, {'once': true});
@@ -31,7 +31,7 @@ const db = async () => {
           console.log('cleared storage');
           location.reload();
         }
-      }, {'once': true});
+      }, {'once': true});*/
     }
 
     return __db;
