@@ -41,7 +41,7 @@ export type ReactionEvent = {
 export const voteKind = (r: ReactionEvent): VoteKind => {
   if (r.content === '-') {
     return -1;
-  } else if (r.content === '+') {
+  } else if (r.content.length === 0 || r.content === '+') {
     return 1;
   } else {
     return 0;
