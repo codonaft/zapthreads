@@ -12,8 +12,6 @@ const TIMEOUT = 7000;
 
 let publishAttempt = 0;
 
-export const sleep = async (timeout: number = TIMEOUT) => new Promise(resolve => setTimeout(resolve, timeout));
-
 const timeLimit = async <T>(fn: () => Promise<T>, timeout: number = TIMEOUT) => {
   let timer;
   try {
@@ -31,7 +29,7 @@ const timeLimit = async <T>(fn: () => Promise<T>, timeout: number = TIMEOUT) => 
 const publishOnRelay = async (relayUrl: string, event: Event) => {
   // @ts-ignore
   let relay = pool.relays.get(relayUrl);
-  if (!relay) {
+  if (!relay || !relay.connected) {
     relay = await Relay.connect(relayUrl);
   }
   await relay.publish(event);

@@ -1,10 +1,10 @@
 import { JSX, createComputed, createEffect, createMemo, createSignal, on, onCleanup, batch } from "solid-js";
+import { modifyMutable, produce } from "solid-js/store";
 import { customElement } from 'solid-element';
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer";
-import { createTrigger } from "@solid-primitives/trigger";
 import style from './styles/index.css?raw';
 import { saveRelayLatestForFilter, updateProfiles, totalChildren, sortByDate, parseUrlPrefixes, parseContent, getRelayLatest as getRelayLatestForFilter, normalizeURL, currentTime } from "./util/ui.ts";
-import { sleep, fetchRelayInformation, supportedReadRelay, supportedWriteRelay, powIsOk } from "./util/network.ts";
+import { fetchRelayInformation, supportedReadRelay, supportedWriteRelay, powIsOk } from "./util/network.ts";
 import { nest } from "./util/nest.ts";
 import { store, pool, isDisableType, signersStore } from "./util/stores.ts";
 import { Thread, ellipsisSvg } from "./thread.tsx";
@@ -68,14 +68,13 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     store.disableFeatures = props.disable.split(',').map(e => e.trim()).filter(isDisableType);
     store.urlPrefixes = parseUrlPrefixes(props.urls);
     store.replyPlaceholder = props.replyPlaceholder;
-    store.languages = props.languages.split(',').map(e => e.trim());
+    store.languages = props.languages.split(',').map(e => e.trim()).filter(i => i.length > 0);
     store.maxCommentLength = +props.maxCommentLength || Infinity;
     store.writePowDifficulty = Math.max(store.writePowDifficulty, minReadPow());
   });
 
   const MAX_RELAYS = 32;
   const rawReadRelays = () => props.readRelays;
-  const [trackResubscribe, tryResubscribe] = createTrigger();
 
   const DAY_IN_SECS = 24*60*60;
   const WEEK_IN_SECS = 7*DAY_IN_SECS;
@@ -94,7 +93,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       }
     }
     if (expiredRelays.length === 0) return;
-    console.log(`[zapthreads] updating relay infos for ${expiredRelays.length} relays`);
     await Promise.allSettled(expiredRelays
       .map(async (relayUrl) => {
         let info;
@@ -118,6 +116,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         });
       }));
     await updateWritePow();
+    console.log(`[zapthreads] updated relay infos for ${expiredRelays.length} relays`);
   };
 
   const updateRelays = async () => {
@@ -129,7 +128,9 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       : Object.fromEntries(
           (props.readRelays || '')
             .split(',')
-            .map(r => [r, {read: true, write: true}]));
+            .map(i => i.trim())
+            .filter(i => i.length > 0)
+            .map(r => [r, {read: true, write: false}]));
 
     const relays: RelayRecord = Object.fromEntries(
       Object
@@ -142,7 +143,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       .entries(relays)
       .sort(([a, _a], [b, _b]) => a.localeCompare(b));
 
-    const healthyRelays: [string, {read: boolean; write: boolean}][] = [];
+    const healthyRelays: [string, { read: boolean; write: boolean; }][] = [];
     for (const [relayUrl, options] of sortedRelays) {
       if (healthyRelays.length >= MAX_RELAYS) break;
       const relayInfo = await find('relayInfos', relayUrl);
@@ -156,16 +157,13 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     }
     const readRelays = healthyRelays.filter(([relayUrl, options]) => options.read).map(([r, _]) => r);
     const writeRelays = healthyRelays.filter(([relayUrl, options]) => options.write).map(([r, _]) => r);
-
-    store.writeRelays = writeRelays;
-    if (JSON.stringify(store.readRelays) !== JSON.stringify(readRelays)) {
-      batch(() => {
+    modifyMutable(store, produce((store) => {
+      store.writeRelays = writeRelays;
+      if (JSON.stringify(store.readRelays) !== JSON.stringify(readRelays)) {
         store.readRelays = readRelays;
-        tryResubscribe();
-      });
-    }
+      }
+    }));
     await updateWritePow();
-    console.log(`readRelays=${readRelays} writeRelays=${writeRelays}`);
   };
 
   createEffect(on([rawReadRelays], updateRelays));
@@ -206,7 +204,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     const now = currentTime();
     if (now < lastUpdateSpamFilters + DAY_IN_SECS) return;
 
-    console.log('[zapthreads] updating spam filters');
     await Promise.allSettled(['events', 'pubkeys'].map(async (view) => {
       const API_METHOD = 'https://spam.nostr.band/spam_api?method=get_current_spam';
       try {
@@ -236,6 +233,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         console.log(e);
       }
     }));
+    console.log('[zapthreads] updated spam filters');
   };
 
   const anchor = () => store.anchor!;
@@ -256,7 +254,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
   // Anchors -> root events
   createComputed(on([anchor, readRelays], async () => {
-    if (anchor().type === 'error') return;
+    if (store.rootEventIds.length > 0 || anchor().type === 'error') return;
 
     let filterForRemoteRootEvents: Filter;
     let localRootEvents: NoteEvent[];
@@ -296,8 +294,11 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       default: throw 'error';
     }
 
+    const _relays = readRelays();
+    if (_relays.length === 0) return;
+
     // No `since` here as we are not keeping track of a since for root events
-    const remoteRootEvents = await pool.querySync(readRelays(), { ...filterForRemoteRootEvents });
+    const remoteRootEvents = await pool.querySync(_relays, { ...filterForRemoteRootEvents });
 
     const remoteRootNoteEvents = remoteRootEvents.map(eventToNoteEvent);
     for (const e of remoteRootNoteEvents) {
@@ -379,7 +380,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   let sub: SubCloser | null;
 
   // Filter -> remote events, content
-  createEffect(on([filter, trackResubscribe], async () => {
+  createEffect(on([filter, readRelays], async () => {
     // Fix values to this effect
     const _filter = filter();
     const _readRelays = readRelays();
