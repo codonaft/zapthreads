@@ -23,13 +23,13 @@ const db = async () => {
 
       /*__db.addEventListener('close', (event) => {
         console.log('closed database');
-        location.reload();
+        location.reload(); // TODO: disable database instead?
       }, {'once': true});
 
       window.addEventListener('storage', (event) => {
         if (event.key === null) {
           console.log('cleared storage');
-          location.reload();
+          location.reload(); // TODO: disable database instead?
         }
       }, {'once': true});*/
     }

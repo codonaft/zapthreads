@@ -4,9 +4,8 @@ import { UnsignedEvent } from "nostr-tools/pure";
 import { SimplePool } from "nostr-tools/pool";
 import { Filter } from "nostr-tools/filter";
 import { WindowNostr } from "nostr-tools/nip07";
-import { Profile } from "./models.ts";
+import { Profile, Eid, Pk } from "./models.ts";
 import { createMutable } from "solid-js/store";
-import { Eid } from "./models.ts";
 import { NestedNoteEvent } from "./nest.ts";
 
 // Global data (for now)
@@ -21,11 +20,17 @@ export const store = createMutable<PreferencesStore>({
   userStartedReadingComments: false,
   threadCollapsed: new Map,
   messageExpanded: new ReactiveSet,
+
   languages: [],
   maxCommentLength: 0,
   validatedEvents: new Map,
   validateReadPow: true,
   writePowDifficulty: 0,
+  spam: {
+    events: new Set,
+    pubkeys: new Set,
+  },
+
   filter: {},
   profiles: () => [],
 });
@@ -45,7 +50,7 @@ export type EventSigner = {
 
 export type UrlPrefixesKeys = 'naddr' | 'nevent' | 'note' | 'npub' | 'nprofile' | 'tag';
 
-const _types = ['reply', 'likes', 'votes', 'zaps', 'publish', 'watch', 'replyAnonymously', 'hideContent'] as const;
+const _types = ['reply', 'likes', 'votes', 'zaps', 'publish', 'watch', 'replyAnonymously', 'hideContent', 'spamNostrBand'] as const;
 type DisableType = typeof _types[number];
 export const isDisableType = (type: string): type is DisableType => {
   return _types.includes(type as DisableType);
@@ -62,11 +67,17 @@ export type PreferencesStore = {
   userStartedReadingComments: boolean,
   threadCollapsed: Map<Eid, boolean>,
   messageExpanded: ReactiveSet<Eid>,
+
   languages: string[],
   maxCommentLength: number,
   validatedEvents: Map<Eid, boolean>,
   validateReadPow: boolean,
   writePowDifficulty: number;
+  spam: {
+    events: Set<Eid>;
+    pubkeys: Set<Pk>;
+  };
+
   filter: Filter;  // derived from anchor prop
   externalAuthor?: string; // prop, mostly used with http anchor type
   disableFeatures?: DisableType[]; // prop

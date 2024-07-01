@@ -16,6 +16,10 @@ describe("ui utils", () => {
       validatedEvents: new Map,
       validateReadPow: true,
       writePowDifficulty: 0,
+      spam: {
+        events: new Set,
+        pubkeys: new Set,
+      },
       profiles: () => [],
       rootEventIds: [],
       topRootEventIds: new Set,

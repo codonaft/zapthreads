@@ -16,7 +16,7 @@ import { RelayRecord } from "nostr-tools/relay";
 import { Event } from "nostr-tools/core";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { Filter } from "nostr-tools/filter";
-import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, RelayInfo, Eid, Pk } from "./util/models.ts";
+import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, RelayInfo, Eid, Pk, Spam } from "./util/models.ts";
 import { SubCloser } from "nostr-tools/pool";
 
 const ZapThreads = (props: { [key: string]: string; }) => {
@@ -77,11 +77,11 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   const rawReadRelays = () => props.readRelays;
   const [trackResubscribe, tryResubscribe] = createTrigger();
 
-  const WEEK = 7*24*60*60;
-  const TEN_MINS = 10*60;
+  const DAY_IN_SECS = 24*60*60;
+  const WEEK_IN_SECS = 7*DAY_IN_SECS;
   const infoExpired = (now: number, relayInfo?: RelayInfo) => {
     const lastInfoUpdateAttemptAt = relayInfo && relayInfo.lastInfoUpdateAttemptAt;
-    return !lastInfoUpdateAttemptAt || now > lastInfoUpdateAttemptAt + (relayInfo.info ? TEN_MINS : WEEK); // TODO: always week, until unavailable + !info?
+    return !lastInfoUpdateAttemptAt || now > lastInfoUpdateAttemptAt + (relayInfo.info ? DAY_IN_SECS : WEEK_IN_SECS);
   };
 
   const updateRelayInfos = async () => {
@@ -169,6 +169,74 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   };
 
   createEffect(on([rawReadRelays], updateRelays));
+
+  const loadSpamFilters = async () => {
+    const now = currentTime();
+    const lastUpdate = Math.max(...await Promise.all(['events', 'pubkeys'].map(
+      async (view: string) => {
+        // @ts-ignore
+        const fromStore = store.spam[view];
+        const type = `${view}Spam`;
+        let lastUpdate = 0;
+        const outdatedIds = [];
+        // @ts-ignore
+        const items: Spam[] = await findAll(type);
+        for (const i of items) {
+          lastUpdate = Math.max(lastUpdate, i.addedAt);
+          if (!i.used && now >= i.addedAt + WEEK_IN_SECS) {
+            outdatedIds.push(i.id);
+          } else {
+            // @ts-ignore
+            fromStore.add(i.id);
+          }
+        }
+        // @ts-ignore
+        remove(type, outdatedIds);
+        return lastUpdate;
+      }
+    )));
+    return lastUpdate;
+  }
+
+  const updateSpamFilters = async (lastUpdateSpamFilters: number) => {
+    if (disableFeatures().includes('spamNostrBand')) {
+      return;
+    }
+
+    const now = currentTime();
+    if (now < lastUpdateSpamFilters + DAY_IN_SECS) return;
+
+    console.log('[zapthreads] updating spam filters');
+    await Promise.allSettled(['events', 'pubkeys'].map(async (view) => {
+      const API_METHOD = 'https://spam.nostr.band/spam_api?method=get_current_spam';
+      try {
+        const request = fetch(`${API_METHOD}&view=${view}`);
+        const type = `${view}Spam`;
+
+        // @ts-ignore
+        const fromStore = store.spam[view];
+
+        const response = await request;
+        if (response.status === 200) {
+          const newIds = (await response.json())[`cluster_${view}`]
+            .map((i: any) => i[view])
+            .flat()
+            .filter((id: string) =>
+              // @ts-ignore
+              !fromStore.has(id)
+            );
+          newIds.forEach((id: string) => {
+            // @ts-ignore
+            fromStore.add(id);
+            // @ts-ignore
+            save(type, { id, addedAt: now, used: false });
+          });
+        }
+      } catch (e) {
+        console.log(e);
+      }
+    }));
+  };
 
   const anchor = () => store.anchor!;
   const readRelays = () => store.readRelays;
@@ -294,12 +362,14 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     return store.filter;
   }, { defer: true });
 
-  const validEvent = async (id: string, powOrTags: number | string[][], kind: number, content: string) => {
+  const validEvent = async (id: string, pk: Pk, powOrTags: number | string[][], kind: number, content: string) => {
     if (store.validatedEvents.has(id)) {
       return store.validatedEvents.get(id)!;
     }
     const valid =
       (content.length <= store.maxCommentLength) &&
+      !store.spam.events.has(id) &&
+      !store.spam.pubkeys.has(pk) &&
       (!store.validateReadPow || powIsOk(id, powOrTags, minReadPow())) &&
       (!store.onReceive || (await store.onReceive(id, kind, content)));
     store.validatedEvents.set(id, valid);
@@ -320,6 +390,8 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     if (Object.entries(_filter).length === 0 || _readRelays.length === 0) {
       return;
     }
+
+    const lastUpdateSpamFilters = await loadSpamFilters();
 
     // Ensure clean subs
     sub?.close();
@@ -352,7 +424,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       {
         onevent(e) {
           (async () => {
-            const valid = await validEvent(e.id, e.tags, e.kind, e.content);
+            const valid = await validEvent(e.id, e.pubkey, e.tags, e.kind, e.content);
             if (e.kind === 1 || e.kind === 9802) {
               if (e.content.trim()) {
                 if (valid) {
@@ -400,7 +472,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
             save('aggregates', zapsAggregate);
 
             await updateRelayInfos();
-            // TODO: remove the rest of invalid messages
+            await updateSpamFilters(lastUpdateSpamFilters);
           })();
 
           setTimeout(async () => {
