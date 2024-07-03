@@ -11,27 +11,26 @@ type InMemoryDatabaseFactory = <Name extends StoreNames<DBTypes>>() => { [key in
 const inMemoryDatabaseFactory: InMemoryDatabaseFactory = () => ({});
 let memDb = inMemoryDatabaseFactory();
 let _retryOpenDatabase = true;
+let _enabledDatabase = true;
 
 let __db: IDBPDatabase<ZapthreadsSchema>;
 const db = async () => {
-  if (_retryOpenDatabase === false) {
-    return;
-  }
+  if (!_retryOpenDatabase || !_enabledDatabase) return;
   try {
     if (!__db) {
       __db = await openDB<ZapthreadsSchema>('zapthreads', 2, { upgrade });
 
-      /*__db.addEventListener('close', (event) => {
+      __db.addEventListener('close', (event) => {
         console.log('closed database');
-        location.reload(); // TODO: disable database instead?
+        _enabledDatabase = false;
       }, {'once': true});
 
       window.addEventListener('storage', (event) => {
         if (event.key === null) {
           console.log('cleared storage');
-          location.reload(); // TODO: disable database instead?
+          _enabledDatabase = false;
         }
-      }, {'once': true});*/
+      }, {'once': true});
     }
 
     return __db;
@@ -79,6 +78,7 @@ export const watch = <Name extends StoreNames<DBTypes>, IndexName extends IndexN
 };
 
 export const findAll = async <Name extends StoreNames<DBTypes>, IndexName extends IndexNames<DBTypes, Name>>(type: Name, query?: IndexKey<DBTypes, Name, IndexName> | IndexKey<DBTypes, Name, IndexName>[] | IDBKeyRange, options?: { index: IndexName; }): Promise<StoreValue<DBTypes, Name>[]> => {
+  if (!_enabledDatabase) return [];
   const _db = await db();
   if (!_db) {
     const map = memDb[type];
@@ -106,6 +106,7 @@ export const findAll = async <Name extends StoreNames<DBTypes>, IndexName extend
 };
 
 export const find = async <Name extends StoreNames<DBTypes>, IndexName extends IndexNames<DBTypes, Name>>(type: Name, query: IndexKey<DBTypes, Name, IndexName> | IDBKeyRange, options?: { index: IndexName; }): Promise<StoreValue<DBTypes, Name> | undefined> => {
+  if (!_enabledDatabase) return;
   const _db = await db();
   if (!_db) {
     const map = memDb[type];
@@ -159,6 +160,7 @@ const _removeFromMemoryDatabase = <Name extends StoreNames<DBTypes>, IndexName e
 }
 
 export const save = async <Name extends StoreNames<DBTypes>, Value extends StoreValue<DBTypes, Name>>(type: Name, model: Value, options: { immediate: boolean; } = { immediate: false }) => {
+  if (!_enabledDatabase) return;
   const _db = await db();
 
   if (options.immediate) {
@@ -187,6 +189,7 @@ export const save = async <Name extends StoreNames<DBTypes>, Value extends Store
 };
 
 export const remove = async <Name extends StoreNames<DBTypes>, IndexName extends IndexNames<DBTypes, Name>, Value extends StoreValue<DBTypes, Name>>(type: Name, query: IndexKey<DBTypes, Name, IndexName>[] | IndexKey<DBTypes, Name, IndexName>[][], options: { immediate: boolean; } = { immediate: true }) => {
+  if (!_enabledDatabase) return;
   const _db = await db();
   let ok = true;
   if (options.immediate) {
@@ -206,6 +209,7 @@ export const remove = async <Name extends StoreNames<DBTypes>, IndexName extends
 };
 
 export const clear = async () => {
+  if (!_enabledDatabase) return;
   const _db = await db();
   if (!_db) {
     memDb = {};
