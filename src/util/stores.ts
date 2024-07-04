@@ -1,7 +1,5 @@
-import { ReactiveSet } from "@solid-primitives/set";
 import { Event } from "nostr-tools/core";
 import { UnsignedEvent } from "nostr-tools/pure";
-import { SimplePool } from "nostr-tools/pool";
 import { Filter } from "nostr-tools/filter";
 import { WindowNostr } from "nostr-tools/nip07";
 import { Profile, Eid, Pk } from "./models.ts";
@@ -9,9 +7,6 @@ import { createMutable } from "solid-js/store";
 import { Accessor, Setter } from "solid-js";
 import { Signal } from "./solidjs.ts";
 import { NestedNoteEvent } from "./nest.ts";
-
-// Global data (for now)
-export const pool = new SimplePool();
 
 export const store = createMutable<PreferencesStore>({
   readRelays: [],
@@ -25,8 +20,8 @@ export const store = createMutable<PreferencesStore>({
   languages: [],
   maxCommentLength: 0,
   validatedEvents: new Map,
-  validateReadPow: true,
   writePowDifficulty: 0,
+  maxWritePow: 0,
   spam: {
     events: new Set,
     pubkeys: new Set,
@@ -87,8 +82,8 @@ export type PreferencesStore = {
   languages: string[],
   maxCommentLength: number,
   validatedEvents: Map<Eid, boolean>,
-  validateReadPow: boolean,
   writePowDifficulty: number;
+  maxWritePow: number;
   spam: {
     events: Set<Eid>;
     pubkeys: Set<Pk>;

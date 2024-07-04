@@ -3,14 +3,16 @@ import { modifyMutable, produce } from "solid-js/store";
 import { customElement } from 'solid-element';
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer";
 import style from './styles/index.css?raw';
-import { saveRelayLatestForFilter, updateProfiles, totalChildren, sortByDate, parseUrlPrefixes, parseContent, getRelayLatest as getRelayLatestForFilter, normalizeURL, currentTime } from "./util/ui.ts";
-import { fetchRelayInformation, supportedReadRelay, supportedWriteRelay, powIsOk } from "./util/network.ts";
+import { saveRelayLatestForFilter, updateProfiles, totalChildren, parseUrlPrefixes, parseContent, normalizeURL } from "./util/ui.ts";
+import { normalizeURL as nostrNormalizeURL } from "nostr-tools/utils";
+import { fetchRelayInformation, infoExpired, powIsOk, pool, SHORT_TIMEOUT } from "./util/network.ts";
 import { nest } from "./util/nest.ts";
-import { store, pool, isDisableType, signersStore } from "./util/stores.ts";
+import { store, isDisableType, signersStore } from "./util/stores.ts";
+import { HOUR_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, sortByDate, currentTime } from "./util/date-time.ts";
 import { Thread, ellipsisSvg } from "./thread.tsx";
 import { RootComment } from "./reply.tsx";
 import { decode as bolt11Decode } from "light-bolt11-decoder";
-import { clear as clearCache, find, findAll, save, remove, watchAll } from "./util/db.ts";
+import { clear as clearCache, find, findAll, save, remove, watchAll, onSaved } from "./util/db.ts";
 import { decode, npubEncode } from "nostr-tools/nip19";
 import { RelayRecord } from "nostr-tools/relay";
 import { Event } from "nostr-tools/core";
@@ -22,21 +24,6 @@ import { SubCloser } from "nostr-tools/pool";
 const ZapThreads = (props: { [key: string]: string; }) => {
   const minReadPow = () => +props.minReadPow;
   const maxWritePow = () => +props.maxWritePow;
-
-  const updateWritePow = async () => {
-    const readRelaysCanValidatePow = await Promise.all(store.readRelays.map(async (relayUrl) => {
-      const relayInfo = await find('relayInfos', relayUrl);
-      return relayInfo && relayInfo.info && relayInfo.info.limitation && relayInfo.info.limitation.min_pow_difficulty &&
-        relayInfo.info.supported_nips.includes(13) && relayInfo.info.limitation.min_pow_difficulty >= minReadPow();
-    }));
-    store.validateReadPow = readRelaysCanValidatePow.filter(i => !i).length > 0;
-
-    const writeRelaysPows = await Promise.all(store.writeRelays.map(async (relayUrl) => {
-      const relayInfo = await find('relayInfos', relayUrl);
-      return relayInfo?.info?.limitation?.min_pow_difficulty || 0;
-    }));
-    store.writePowDifficulty = Math.max(minReadPow(), ...writeRelaysPows);
-  };
 
   createComputed(() => {
     store.anchor = (() => {
@@ -71,53 +58,10 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     store.languages = props.languages.split(',').map(e => e.trim()).filter(i => i.length > 0);
     store.maxCommentLength = +props.maxCommentLength || Infinity;
     store.writePowDifficulty = Math.max(store.writePowDifficulty, minReadPow());
+    store.maxWritePow = maxWritePow();
   });
 
-  const MAX_RELAYS = 32;
   const rawReadRelays = () => props.readRelays;
-
-  const DAY_IN_SECS = 24*60*60;
-  const WEEK_IN_SECS = 7*DAY_IN_SECS;
-  const infoExpired = (now: number, relayInfo?: RelayInfo) => {
-    const lastInfoUpdateAttemptAt = relayInfo && relayInfo.lastInfoUpdateAttemptAt;
-    return !lastInfoUpdateAttemptAt || now > lastInfoUpdateAttemptAt + (relayInfo.info ? DAY_IN_SECS : WEEK_IN_SECS);
-  };
-
-  const updateRelayInfos = async () => {
-    const now = currentTime();
-    const expiredRelays = [];
-    for (const relayUrl of new Set([...store.readRelays, ...store.writeRelays])) {
-      const relayInfo = await find('relayInfos', relayUrl);
-      if (infoExpired(now, relayInfo)) {
-        expiredRelays.push(relayUrl);
-      }
-    }
-    if (expiredRelays.length === 0) return;
-    await Promise.allSettled(expiredRelays
-      .map(async (relayUrl) => {
-        let info;
-        try {
-          const possibleInfo = await fetchRelayInformation(relayUrl);
-
-          // ensure server returned something parsable
-          supportedReadRelay(possibleInfo);
-          supportedWriteRelay(undefined, possibleInfo, undefined);
-
-          info = possibleInfo;
-        } catch (e) {
-          //console.log('failed to fetch relay information', e);
-          // TODO: if cors issue or whatever non-200 answer ..., otherwise (time out) — update expiresAt to smaller value (with exp backoff?)
-        }
-
-        await save('relayInfos', {
-          name: relayUrl,
-          info,
-          lastInfoUpdateAttemptAt: now,
-        });
-      }));
-    await updateWritePow();
-    console.log(`[zapthreads] updated relay infos for ${expiredRelays.length} relays`);
-  };
 
   const updateRelays = async () => {
     const now = currentTime();
@@ -137,33 +81,17 @@ const ZapThreads = (props: { [key: string]: string; }) => {
        .entries(rawRelays)
        .map(([relayUrl, options]: [string, any]) => [relayUrl.trim(), options])
        .filter(([relayUrl, options]) => relayUrl.length > 0)
-       .map(([relayUrl, options]) => [new URL(relayUrl).toString(), options]));
+       .map(([relayUrl, options]) => [nostrNormalizeURL(new URL(relayUrl).toString()), options]));
 
-    const sortedRelays = Object
-      .entries(relays)
-      .sort(([a, _a], [b, _b]) => a.localeCompare(b));
-
-    const healthyRelays: [string, { read: boolean; write: boolean; }][] = [];
-    for (const [relayUrl, options] of sortedRelays) {
-      if (healthyRelays.length >= MAX_RELAYS) break;
-      const relayInfo = await find('relayInfos', relayUrl);
-      const probablySupported = infoExpired(now, relayInfo) || (
-        (!options.read || supportedReadRelay(relayInfo!.info)) &&
-        (!options.write || supportedWriteRelay(undefined, relayInfo!.info, maxWritePow()))
-      );
-      if (probablySupported) {
-        healthyRelays.push([relayUrl, options]);
-      }
-    }
-    const readRelays = healthyRelays.filter(([relayUrl, options]) => options.read).map(([r, _]) => r);
-    const writeRelays = healthyRelays.filter(([relayUrl, options]) => options.write).map(([r, _]) => r);
+    const entries = Object.entries(relays);
+    const readRelays = entries.filter(([relayUrl, options]) => options.read).map(([r, _]) => r);
     modifyMutable(store, produce((store) => {
-      store.writeRelays = writeRelays;
+      store.writeRelays = entries.filter(([relayUrl, options]) => options.write).map(([r, _]) => r);
       if (JSON.stringify(store.readRelays) !== JSON.stringify(readRelays)) {
         store.readRelays = readRelays;
       }
     }));
-    await updateWritePow();
+    await pool.updateWritePow(minReadPow());
   };
 
   createEffect(on([rawReadRelays], updateRelays));
@@ -202,12 +130,18 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     }
 
     const now = currentTime();
-    if (now < lastUpdateSpamFilters + DAY_IN_SECS) return;
+    const deadline = lastUpdateSpamFilters + DAY_IN_SECS;
+    if (now < deadline) {
+      console.log(`[zapthreads] spam filters will be updated in ${((deadline - now) / HOUR_IN_SECS).toFixed(1)} hours`);
+      return;
+    }
 
     await Promise.allSettled(['events', 'pubkeys'].map(async (view) => {
       const API_METHOD = 'https://spam.nostr.band/spam_api?method=get_current_spam';
       try {
-        const request = fetch(`${API_METHOD}&view=${view}`);
+        const request = fetch(`${API_METHOD}&view=${view}`, {
+          signal: AbortSignal.timeout(SHORT_TIMEOUT),
+        });
         const type = `${view}Spam`;
 
         // @ts-ignore
@@ -230,7 +164,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
           });
         }
       } catch (e) {
-        console.log(e);
+        console.error(e);
       }
     }));
     console.log('[zapthreads] updated spam filters');
@@ -254,6 +188,9 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
   // Anchors -> root events
   createComputed(on([anchor, readRelays], async () => {
+    const _relays = readRelays();
+    if (_relays.length === 0) return;
+
     if (store.rootEventIds.length > 0 || anchor().type === 'error') return;
 
     let filterForRemoteRootEvents: Filter;
@@ -271,17 +208,11 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       case 'note':
         // In the case of note we only have one possible anchor, so return if found
         const e = await find('events', IDBKeyRange.only(anchor().value));
+        store.rootEventIds = [anchor().value];
         if (e) {
-          localRootEvents = [e];
-          store.rootEventIds = [e.id];
           store.anchorAuthor = e.pk;
-          return;
-        } else {
-          localRootEvents = [];
-          // queue to fetch from remote
-          filterForRemoteRootEvents = { ids: [anchor().value] };
-          break;
         }
+        return;
       case 'naddr':
         const [kind, pubkey, identifier] = anchor().value.split(':');
         localRootEvents = (await findAll('events', identifier, { index: 'd' })).filter(e => e.pk === pubkey);
@@ -293,9 +224,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         break;
       default: throw 'error';
     }
-
-    const _relays = readRelays();
-    if (_relays.length === 0) return;
 
     // No `since` here as we are not keeping track of a since for root events
     const remoteRootEvents = await pool.querySync(_relays, { ...filterForRemoteRootEvents });
@@ -330,7 +258,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     if (remoteRootNoteEvents.length > 0) {
       store.anchorAuthor = remoteRootNoteEvents[0].pk;
     }
-
   }));
 
   const rootEventIds = () => store.rootEventIds;
@@ -371,7 +298,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       (content.length <= store.maxCommentLength) &&
       !store.spam.events.has(id) &&
       !store.spam.pubkeys.has(pk) &&
-      (!store.validateReadPow || powIsOk(id, powOrTags, minReadPow())) &&
+      (/*!store.validateReadPow ||*/ powIsOk(id, powOrTags, minReadPow())) &&
       (!store.onReceive || (await store.onReceive(id, kind, content)));
     store.validatedEvents.set(id, valid);
     return valid;
@@ -404,7 +331,8 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       sub = null;
     });
 
-    const kinds = [1, 9802, 7, 9735];
+    const noteKinds = [1, 9802];
+    const kinds = [...noteKinds, 7, 9735];
     // TODO restore with a specific `since` for aggregates
     // (leaving it like this will fail when re-enabling likes/zaps)
     // if (!store.disableFeatures().includes('likes')) {
@@ -414,35 +342,41 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     //   kinds.push(9735);
     // }
 
-    console.log(`[zapthreads] subscribing to ${_anchor.value} on ${_readRelays}`);
+    console.log(`[zapthreads] subscribing to ${_anchor.value} on`, [..._readRelays]);
 
-    const since = await getRelayLatestForFilter(_anchor, _readRelays);
+    const queryNoteRootEvent = !store.anchorAuthor && anchor().type === 'note';
+    const rootEventFilter = queryNoteRootEvent ? [{ ids: [anchor().value], kinds: noteKinds, limit: 1 }] : [];
+    const request = (url: string) => [url, [...rootEventFilter, { ..._filter, kinds }]];
 
     const newLikeIds = new Set<string>();
     const newZaps: { [id: string]: string; } = {};
 
-    sub = pool.subscribeMany(_readRelays, [{ ..._filter, kinds, since }],
+    sub = await pool.subscribeManyMap(
+      Object.fromEntries(_readRelays.map(request)),
       {
         onevent(e) {
           (async () => {
             const valid = await validEvent(e.id, e.pubkey, e.tags, e.kind, e.content);
-            if (e.kind === 1 || e.kind === 9802) {
-              if (e.content.trim()) {
-                if (valid) {
-                  save('events', eventToNoteEvent(e));
-                } else {
-                  remove('events', [e.id]);
+            if (noteKinds.includes(e.kind)) {
+              const isNoteRootEvent = queryNoteRootEvent && !store.anchorAuthor && e.id === anchor().value;
+              if (isNoteRootEvent || (valid && e.content.trim())) {
+                if (isNoteRootEvent) {
+                  console.log(`[zapthreads] anchor author is ${e.pubkey}`);
+                  store.anchorAuthor = e.pubkey;
                 }
+                save('events', eventToNoteEvent(e));
+              } else {
+                remove('events', [e.id]);
               }
             } else if (e.kind === 7) {
               newLikeIds.add(e.id);
               if (e.content.trim()) {
-                const reactionEvent = eventToReactionEvent(e);
+                const reactionEvent = eventToReactionEvent(e, _anchor.value);
                 if (voteKind(reactionEvent) !== 0) { // remove this condition if you want to track all reactions
                   if (valid) {
                     save('reactions', reactionEvent);
                   } else {
-                    remove('reactions', [e.id]);
+                    remove('reactions', [e.id]); // FIXME: may not work after setting "since"
                   }
                 }
               }
@@ -471,23 +405,27 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
             zapsAggregate.ids = [...new Set([...zapsAggregate.ids, ...Object.keys(newZaps)])];
             save('aggregates', zapsAggregate);
-
-            await updateRelayInfos();
-            await updateSpamFilters(lastUpdateSpamFilters);
           })();
 
-          setTimeout(async () => {
+          onSaved(async () => {
             // Update profiles of current events (includes anchor author)
-            await updateProfiles([..._events.map(e => e.pk)], _readRelays, _profiles);
+            await updateProfiles(new Set([..._events.map(e => e.pk)]), _readRelays, _profiles);
 
             // Save latest received events for each relay
             saveRelayLatestForFilter(_anchor, _events);
 
+            await updateSpamFilters(lastUpdateSpamFilters);
+            await pool.estimateWriteRelayLatencies();
+            await pool.updateRelayInfos(minReadPow());
+
             if (closeOnEose()) {
               sub?.close();
-              pool.close(_readRelays);
+              const writeRelays = new Set(store.writeRelays);
+              pool.close(_readRelays.filter(r => !writeRelays.has(r)));
             }
-          }, 96); // same as batched throttle in db.ts
+
+            console.log('[zapthreads] oneose has finished');
+          });
         }
       }
     );
@@ -583,7 +521,14 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
   const nestedEvents = createMemo(() => {
     if (store.rootEventIds && store.rootEventIds.length) {
-      return nest(events()).filter(e => {
+      const _events = events();
+      (async () => { for (const e of _events) {
+        if (!(await validEvent(e.id, e.pk, e.pow, e.k, e.c)) && (anchor().type !== 'note' || store.anchorAuthor !== e.pk)) {
+          // TODO: if pow has changed - reset "since"?
+          remove('events', [e.id]);
+        }
+      } })();
+      return nest(_events).filter(e => {
         // remove all highlights without children (we only want those that have comments on them)
         return !(e.k === 9802 && e.children.length === 0);
       });
@@ -612,8 +557,8 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
   const firstLevelComments = () => nestedEvents().filter(n => !n.parent).length;
 
-  const reactions = watchAll(() => ['reactions']);
-  const votes = createMemo(() => reactions().filter(r => voteKind(r) !== 0 && (!store.validatedEvents.has(r.eid) || store.validatedEvents.get(r.eid))));
+  const reactions = watchAll(() => ['reactions', anchor().value, { index: 'a' }]);
+  const votes = createMemo(() => reactions().filter(r => voteKind(r) !== 0 && (!store.validatedEvents.has(r.id) || store.validatedEvents.get(r.id))));
 
   let rootElement: HTMLDivElement | undefined;
   const visible = createVisibilityObserver({ threshold: 0.0 })(() => rootElement);

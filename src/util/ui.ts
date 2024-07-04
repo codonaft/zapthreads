@@ -1,65 +1,83 @@
 import { NestedNoteEvent } from "./nest.ts";
-import { Anchor, UrlPrefixesKeys, pool, PreferencesStore } from "./stores.ts";
+import { Anchor, UrlPrefixesKeys, PreferencesStore } from "./stores.ts";
 import { decode } from "nostr-tools/nip19";
 import { Filter } from "nostr-tools/filter";
+import { Event } from "nostr-tools/core";
 import { matchAll, replaceAll } from "nostr-tools/nip27";
 import nmd from "nano-markdown";
 import { findAll, save } from "./db.ts";
-import { NoteEvent, Profile } from "./models.ts";
+import { NoteEvent, Profile, Eid } from "./models.ts";
+import { pool, rankRelays } from "./network.ts";
+import { currentTime } from "./date-time.ts";
 
 // Misc profile helpers
 
-export const updateProfiles = async (pubkeys: string[], relays: string[], profiles: Profile[]): Promise<void> => {
+export const updateProfiles = async (pubkeys: Set<string>, relays: string[], profiles: Profile[]): Promise<void> => {
+  const kind = 0;
   const now = +new Date;
   const sixHours = 21600000;
 
-  const pubkeysToUpdate = [...new Set(pubkeys)].filter(pubkey => {
-    const profile = profiles.find(p => p.pk === pubkey);
+  const _profiles = new Map(profiles.map(p => [p.pk, p]));
+  const pubkeysToUpdate = new Set([...pubkeys].filter(pubkey => {
+    const profile = _profiles.get(pubkey);
     if (profile?.l && profile!.l > now - sixHours) {
       // console.log(profile!.lastChecked, now - sixHours, profile!.lastChecked < now - sixHours);
       return false;
     } else {
       return true;
     }
-  }).filter(e => !!e);
+  }).filter(e => !!e));
 
-  if (pubkeysToUpdate.length === 0) {
+  if (pubkeysToUpdate.size === 0) {
     return;
   }
 
-  const updatedProfiles = await pool.querySync(relays, {
-    kinds: [0],
-    authors: pubkeysToUpdate
-  });
+  const { fastRelays, slowRelays } = await rankRelays(relays, { kind });
+  const filters = [{ kinds: [kind], authors: [...pubkeysToUpdate] }];
+  const update = async (relays: string[]) => {
+    if (relays.length === 0) return;
+    await pool.subscribeManyEose(relays, filters, {
+      onevent(e: Event) {
+        const pubkey = e.pubkey;
+        if (!pubkeysToUpdate.has(pubkey)) return;
+        try {
+          const payload = JSON.parse(e.content);
+          const updatedProfile = {
+            pk: pubkey,
+            ts: e.created_at,
+            i: payload.image || payload.picture,
+            n: payload.displayName || payload.display_name || payload.name,
+          };
+          const storedProfile = _profiles.get(pubkey);
+          const updated = !storedProfile || !storedProfile?.i || !storedProfile?.n || storedProfile!.ts < updatedProfile.ts;
+          if (updated) {
+            const newProfile = storedProfile
+              ? { ...storedProfile, ...updatedProfile, l: now }
+              : { ...updatedProfile, l: now };
+            _profiles.set(pubkey, newProfile);
+            save('profiles', newProfile);
+            console.log(`[zapthreads] updated profile ${pubkey}`);
+          }
+        } catch (err) {
+          console.error(err);
+        }
+      },
+    });
+  };
 
-  for (const pubkey of pubkeysToUpdate) {
-    const e = updatedProfiles.find(u => u.pubkey === pubkey);
-    if (e) {
-      const payload = JSON.parse(e.content);
-      const pubkey = e.pubkey;
-      const updatedProfile = {
-        pk: pubkey,
-        ts: e.created_at,
-        i: payload.image || payload.picture,
-        n: payload.displayName || payload.display_name || payload.name,
-      };
-      const storedProfile = profiles.find(p => p.pk === pubkey);
-      if (!storedProfile || !storedProfile?.n || storedProfile!.ts < updatedProfile.ts) {
-        save('profiles', { ...updatedProfile, l: now });
-      } else {
-        save('profiles', { ...storedProfile, l: now });
-      }
-    }
-  }
+  await update(fastRelays);
+  update(slowRelays);
 };
 
-export const getRelayLatest = async (anchor: Anchor, relayNames: string[]) => {
+export const getRelayLatest = async (anchor: Anchor) => {
   const relaysForAnchor = await findAll('relays', anchor.value, { index: 'a' });
-  const relaysLatest = relaysForAnchor.filter(r => relayNames.includes(r.n)).map(t => t.l);
-
-  // TODO Do not use the common minimum, pass each relay's latest as its since
-  // (but we need to stop using this pool)
-  return relaysLatest.length > 0 ? Math.min(...relaysLatest) + 1 : 0;
+  const hour = 3600;
+  const now = currentTime();
+  return Object.fromEntries(relaysForAnchor.map(r => {
+    const updatedLongTimeAgo = r.l + hour > now; // make sure we don't miss events sent from machines with poor network or poor time sync
+    const since = Math.max(0, updatedLongTimeAgo ? r.l + 1 : r.l - hour);
+    return [r.n, since];
+  }));
 };
 
 // Calculate and save latest created_at to be used as `since`
@@ -73,9 +91,9 @@ export const saveRelayLatestForFilter = async (anchor: Anchor, events: NoteEvent
   for (const e of events) {
     const relaysForEvent = pool.seenOn.get(e.id);
     if (relaysForEvent) {
-      for (const relay of relaysForEvent) {
-        if (e.ts > (obj[relay.url] || 0)) {
-          obj[relay.url] = e.ts;
+      for (const relayUrl of relaysForEvent) {
+        if (e.ts > (obj[relayUrl] || 0)) {
+          obj[relayUrl] = e.ts;
         }
       }
     }
@@ -234,41 +252,8 @@ export const shortenEncodedId = (encoded: string) => {
   return encoded.substring(0, 8) + '...' + encoded.substring(encoded.length - 4);
 };
 
-export const sortByDate = <T extends { ts?: number; }>(arr: T[]) => arr.sort((a, b) => (a.ts || 0) >= (b.ts || 0)
-  ? -1
-  : 1);
-
 export const svgWidth = 20;
 export const defaultPicture = 'data:image/svg+xml;utf-8,<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><circle cx="512" cy="512" r="512" fill="%23333" fill-rule="evenodd" /></svg>';
-
-export const timeAgo = (timestamp: number): string => {
-  const now = new Date();
-  const secondsPast = Math.floor((now.getTime() - timestamp) / 1000);
-
-  if (secondsPast < 60) {
-    return 'now';
-  }
-  if (secondsPast < 3600) {
-    const m = Math.floor(secondsPast / 60);
-    return `${m} minute${m === 1 ? '' : 's'} ago`;
-  }
-  if (secondsPast <= 86400) {
-    const h = Math.floor(secondsPast / 3600);
-    return `${h} hour${h === 1 ? '' : 's'} ago`;
-  }
-  // 604800ms = 1 week
-  if (secondsPast <= 604800) {
-    const d = Math.floor(secondsPast / 86400);
-    return `${d} day${d === 1 ? '' : 's'} ago`;
-  }
-  if (secondsPast > 604800) {
-    const date: Date = new Date(timestamp);
-    const day = date.toLocaleDateString('en-us', { day: "numeric", month: "long" });
-    const year = date.getFullYear() === now.getFullYear() ? '' : ' ' + date.getFullYear();
-    return 'on ' + day + year;
-  }
-  return '';
-};
 
 export const satsAbbrev = (sats: number): string => {
   if (sats < 10000) {
@@ -279,8 +264,6 @@ export const satsAbbrev = (sats: number): string => {
     return Math.round(sats / 1000000) + 'M';
   }
 };
-
-export const currentTime = () => Math.round(Date.now() / 1000);
 
 export const totalChildren = (event: NestedNoteEvent): number => {
   return event.children.reduce<number>((acc, c) => {

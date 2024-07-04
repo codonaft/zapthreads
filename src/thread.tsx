@@ -1,5 +1,6 @@
 import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on } from "solid-js";
-import { currentTime, defaultPicture, parseContent, shortenEncodedId, sortByDate, svgWidth, timeAgo, totalChildren } from "./util/ui.ts";
+import { defaultPicture, parseContent, shortenEncodedId, svgWidth, totalChildren } from "./util/ui.ts";
+import { DAY_IN_SECS, WEEK_IN_SECS, currentTime, sortByDate, timeAgo } from "./util/date-time.ts";
 import { signAndPublishEvent } from "./util/network.ts";
 import { ReplyEditor } from "./reply.tsx";
 import { NestedNoteEvent } from "./util/nest.ts";
@@ -10,6 +11,7 @@ import { EventSigner, signersStore, store, CommentContext } from "./util/stores.
 import { NoteEvent, Profile, Pk, ReactionEvent, VoteKind, Eid, voteKind } from "./util/models.ts";
 import { remove } from "./util/db.ts";
 import { newSignal, trigger } from "./util/solidjs.ts";
+import { getOrSetOrUpdate } from "./util/collections.ts";
 
 export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottomNestedEvents?: () => NestedNoteEvent[]; articles: () => NoteEvent[]; votes: () => ReactionEvent[]; firstLevelComments?: () => number; }) => {
   const anchor = () => store.anchor!;
@@ -74,7 +76,11 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
           const currentUserVote = newSignal(0);
           const currentNoteVotes = () => props.votes().filter(r => r.noteId === event().id);
           const currentNoteVotesDeduplicatedByPks = () => {
-            const grouped = Map.groupBy(currentNoteVotes(), r => r.pk);
+            const grouped = new Map<Pk, ReactionEvent[]>();
+            currentNoteVotes().forEach((r: ReactionEvent) => {
+              getOrSetOrUpdate(grouped, r.pk, () => [], g => [...g, r]);
+            });
+            //const grouped = Map.groupBy(currentNoteVotes(), r => r.pk); // doesn't work on firefox esr
             return [...grouped.values()].map(reactionEvents => sortByDate(reactionEvents)[0]);
           };
 
@@ -146,7 +152,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
             const unpublishOutdatedEvents = async () => {
               const eids: Eid[] = sortByDate(currentNoteVotes().filter(r => r.pk === signer!.pk))
                 .reverse()
-                .map(i => i.eid);
+                .map(i => i.id);
               if (eids.length === 0) {
                 return;
               }

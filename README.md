@@ -21,6 +21,8 @@ Try it out:
    - Local storage caching, offline-first
    - ~40kb minified/compressed with styles and assets (nocomment is > 240kb)
  - Available as web component or embeddable script
+ - Auto thread collapsing for too long discussions
+ - Optional comments filtering: NIP-13 PoW, spam block-listing, custom filtering
 
 ## Usage
 

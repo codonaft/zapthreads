@@ -8,6 +8,7 @@ type DBTypes = ZapthreadsSchema;
 
 type InMemoryDatabaseFactory = <Name extends StoreNames<DBTypes>>() => { [key in Name]?: { [key: string]: StoreValue<DBTypes, Name>; } };
 
+const DELAY = 96;
 const inMemoryDatabaseFactory: InMemoryDatabaseFactory = () => ({});
 let memDb = inMemoryDatabaseFactory();
 let _retryOpenDatabase = true;
@@ -184,7 +185,7 @@ export const save = async <Name extends StoreNames<DBTypes>, Value extends Store
     if (result) {
       sigStore[type] = +new Date;
     }
-  }, { delay: 96 });
+  }, { delay: DELAY });
   batchFns[type](model);
 };
 
@@ -220,6 +221,11 @@ export const clear = async () => {
 };
 
 // util
+
+export const onSaved = async (f: () => Promise<any>) => {
+  await new Promise(resolve => setTimeout(resolve, DELAY));
+  await f();
+};
 
 // signal store
 const sigStore = createMutable<{ [key: string]: number; }>({});

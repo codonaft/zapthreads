@@ -30,12 +30,13 @@ export type Pk = string;
 export type Eid = string;
 export type VoteKind = -1 | 0 | 1;
 export type ReactionEvent = {
-  eid: Eid;
+  id: Eid;
   noteId: NoteId;
   content: string;
   pk: Pk;
   ts: number;
   pow: number;
+  a: string;
 };
 
 export const voteKind = (r: ReactionEvent): VoteKind => {
@@ -72,12 +73,22 @@ export type Relay = {
 export type RelayInfo = {
   name: string;
   info?: RelayInformation;
-  lastInfoUpdateAttemptAt?: number;
+  l?: number;
+  readAuth?: boolean;
+  writeOnly?: boolean;
+};
+
+export type RelayStats = {
+  name: string;
+  kind: number;
+  serial: number;
+  latency: number;
+  ts: number;
 };
 
 export type Spam = {
   id: string;
-  addedAt: number;
+  addedAt: number; // TODO
   used: boolean;
 };
 
@@ -99,7 +110,7 @@ export interface ZapthreadsSchema extends DBSchema {
     key: string;
     value: ReactionEvent;
     indexes: {
-      'by-eid': Eid;
+      'a': string;
     };
   };
   aggregates: {
@@ -123,6 +134,10 @@ export interface ZapthreadsSchema extends DBSchema {
   relayInfos: {
     key: string;
     value: RelayInfo;
+  };
+  relayStats: {
+    key: string[];
+    value: RelayStats;
     indexes: {
       'by-name': string;
     };
@@ -130,26 +145,21 @@ export interface ZapthreadsSchema extends DBSchema {
   eventsSpam: {
     key: string;
     value: Spam;
-    indexes: {
-      'by-id': string;
-    };
   };
   pubkeysSpam: {
     key: string;
     value: Spam;
-    indexes: {
-      'by-id': string;
-    };
   };
 }
 
 export const indices: { [key in StoreNames<ZapthreadsSchema>]: any } = {
   'events': 'id',
-  'reactions': 'eid',
+  'reactions': 'id',
   'aggregates': ['eid', 'k'],
   'profiles': ['pk'],
   'relays': ['n', 'a'],
   'relayInfos': 'name',
+  'relayStats': ['name', 'kind', 'serial'],
   'eventsSpam': 'id',
   'pubkeysSpam': 'id',
 };
@@ -168,7 +178,7 @@ export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion
   events.createIndex('k', 'k');
 
   const reactions = db.createObjectStore('reactions', { keyPath: indices['reactions'] });
-  reactions.createIndex('by-eid', 'eid');
+  reactions.createIndex('a', 'a');
 
   db.createObjectStore('aggregates', { keyPath: indices['aggregates'] });
 
@@ -179,13 +189,13 @@ export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion
   relays.createIndex('a', 'a');
 
   const relayInfos = db.createObjectStore('relayInfos', { keyPath: indices['relayInfos'] });
-  relayInfos.createIndex('by-name', 'name');
+
+  const relayStats = db.createObjectStore('relayStats', { keyPath: indices['relayStats'] });
+  relayStats.createIndex('by-name', 'name');
 
   const pubkeysSpam = db.createObjectStore('pubkeysSpam', { keyPath: indices['pubkeysSpam'] });
-  pubkeysSpam.createIndex('by-id', 'id');
 
   const eventsSpam = db.createObjectStore('eventsSpam', { keyPath: indices['eventsSpam'] });
-  eventsSpam.createIndex('by-id', 'id');
 };
 
 // util
@@ -227,7 +237,7 @@ export const eventToNoteEvent = (e: UnsignedEvent & { id?: string; }): NoteEvent
   };
 };
 
-export const eventToReactionEvent = (e: UnsignedEvent & { id?: string; }): ReactionEvent => {
+export const eventToReactionEvent = (e: UnsignedEvent & { id?: string; }, anchor: string): ReactionEvent => {
   const nip10result = parse(e);
 
   // extracting note id we reply to, otherwise root note id
@@ -242,11 +252,12 @@ export const eventToReactionEvent = (e: UnsignedEvent & { id?: string; }): React
   const pow = nonce && +nonce[2] || 0;
 
   return {
-    eid: e.id ?? '',
+    id: e.id ?? '',
     noteId,
     pk: e.pubkey,
     content: e.content,
     ts: e.created_at,
     pow,
+    a: anchor,
   };
 }

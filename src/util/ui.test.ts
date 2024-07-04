@@ -1,4 +1,3 @@
-import { ReactiveSet } from "@solid-primitives/set";
 import { UnsignedEvent } from "nostr-tools/pure";
 import { parseContent, parseUrlPrefixes } from "./ui.ts";
 import { createMutable } from "solid-js/store";
@@ -14,8 +13,8 @@ describe("ui utils", () => {
       languages: [],
       maxCommentLength: 0,
       validatedEvents: new Map,
-      validateReadPow: true,
       writePowDifficulty: 0,
+      maxWritePow: 0,
       spam: {
         events: new Set,
         pubkeys: new Set,

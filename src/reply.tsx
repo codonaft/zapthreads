@@ -1,8 +1,9 @@
-import { currentTime, defaultPicture, generateTags, satsAbbrev, shortenEncodedId, updateProfiles } from "./util/ui.ts";
-import { publishEvent, signAndPublishEvent, sign } from "./util/network.ts";
+import { defaultPicture, generateTags, satsAbbrev, shortenEncodedId, updateProfiles } from "./util/ui.ts";
+import { signAndPublishEvent, sign, pool } from "./util/network.ts";
 import { Show, createEffect, createSignal } from "solid-js";
 import { UnsignedEvent, Event } from "nostr-tools/core";
-import { EventSigner, pool, signersStore, store } from "./util/stores.ts";
+import { EventSigner, signersStore, store } from "./util/stores.ts";
+import { currentTime } from "./util/date-time.ts";
 import { generateSecretKey, getPublicKey, getEventHash, finalizeEvent } from "nostr-tools/pure";
 import { createAutofocus } from "@solid-primitives/autofocus";
 import { find, save, watch } from "./util/db.ts";
@@ -56,7 +57,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
         await save('profiles', profile);
       }
       setLoggedInUser(profile);
-      updateProfiles([pk], readRelays(), profiles());
+      updateProfiles(new Set([pk]), readRelays(), profiles());
     } else {
       setLoggedInUser();
     }
@@ -119,7 +120,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
       tags: generateTags(content),
     };
 
-    if (store.anchorAuthor !== unsignedEvent.pubkey) {
+    if (store.anchorAuthor && store.anchorAuthor !== unsignedEvent.pubkey) {
       // Add p tag from note author to notify them
       unsignedEvent.tags.push(['p', store.anchorAuthor!]);
     }
@@ -168,7 +169,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
           console.log('Publishing root event disabled', rootEvent);
         } else {
           console.log('publishing root event');
-          publishEvent(rootEvent);
+          pool.publishEvent(rootEvent);
         }
         // Update filter to this rootEvent
         store.filter = { "#e": [rootEvent.id] };
@@ -186,7 +187,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
       const event = await sign(unsignedEvent, signer);
       setTimeout(() => onSuccess(event), 1000);
     } else {
-      const [ok, failures, event] = await signAndPublishEvent(unsignedEvent, signer);
+      const { ok, failures, event } = await signAndPublishEvent(unsignedEvent, signer);
       if (ok === 0) {
         onError('Error: Your comment was not published to any relay');
       } else {
