@@ -6,9 +6,10 @@ import { NestedNoteEvent } from "./util/nest.ts";
 import { noteEncode, npubEncode } from "nostr-tools/nip19";
 import { UnsignedEvent, Event } from "nostr-tools/core";
 import { Relay } from "nostr-tools/relay";
-import { EventSigner, signersStore, store } from "./util/stores.ts";
+import { EventSigner, signersStore, store, CommentContext } from "./util/stores.ts";
 import { NoteEvent, Profile, Pk, ReactionEvent, VoteKind, Eid, voteKind } from "./util/models.ts";
 import { remove } from "./util/db.ts";
+import { newSignal, trigger } from "./util/solidjs.ts";
 
 export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottomNestedEvents?: () => NestedNoteEvent[]; articles: () => NoteEvent[]; votes: () => ReactionEvent[]; firstLevelComments?: () => number; }) => {
   const anchor = () => store.anchor!;
@@ -25,48 +26,54 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
     <Index each={[...sortByDate(props.topNestedEvents()), ...bottomNestedEvents()]}>
       {
         (event) => {
-          const [isOpen, setOpen] = createSignal(false);
-          const isExpanded = () => store.messageExpanded.has(event().id);
-          const setExpanded = (expanded: boolean) => {
-            if (expanded) {
-              store.messageExpanded.add(event().id);
-            } else {
-              store.messageExpanded.delete(event().id);
-            }
-          };
-          const [overflowed, setOverflowed] = createSignal(false);
-
           const isRootEvent = !event().parent;
           const total = createMemo(() => totalChildren(event()));
-          const shortCommentsSection = () => firstLevelComments() >= MIN_AUTO_COLLAPSED_THREADS || total() >= MIN_AUTO_COLLAPSED_COMMENTS;
-          const [isThreadCollapsed, setThreadCollapsedInternal] = createSignal(store.threadCollapsed.get(event().id) || (isRootEvent && userObservedComments() && shortCommentsSection()));
-          const setThreadCollapsed = (collapsed: boolean) => {
-            setThreadCollapsedInternal(collapsed);
-            store.threadCollapsed.set(event().id, collapsed);
+          const tooLongCommentsSection = () => firstLevelComments() >= MIN_AUTO_COLLAPSED_THREADS || total() >= MIN_AUTO_COLLAPSED_COMMENTS;
+
+          const context: () => CommentContext = () => {
+            const result = store.commentContexts.get(event().id);
+            if (result) {
+              return result!;
+            } else {
+              const [threadCollapsed, setThreadCollapsed] = createSignal<boolean | undefined>();
+              const commentContext = {
+                thread: {
+                  collapsed: threadCollapsed,
+                  setCollapsed: setThreadCollapsed,
+                  trigger: () => setThreadCollapsed(!threadCollapsed()),
+                },
+                text: {
+                  value: parseContent(event(), store, props.articles()),
+                  collapsed: newSignal(true),
+                },
+                reply: {
+                  text: newSignal(''),
+                  isOpen: newSignal(false),
+                }
+              };
+              store.commentContexts.set(event().id, commentContext);
+              return commentContext;
+            }
           };
-          createEffect(on([userObservedComments, shortCommentsSection], () => {
-            const collapsed = store.threadCollapsed.get(event().id);
+          const overflowed = () => context().text.value.length > MAX_LENGTH;
+
+          createEffect(on([userObservedComments, tooLongCommentsSection], () => {
+            const thread = context().thread;
+            const collapsed = thread.collapsed();
             if (collapsed !== undefined) {
-              setThreadCollapsed(collapsed);
+              thread.setCollapsed(collapsed);
             } else if (isRootEvent && userObservedComments()) {
-              setThreadCollapsed(shortCommentsSection());
+              thread.setCollapsed(tooLongCommentsSection());
             }
           }));
 
-          const [votesCount, setVotesCount] = createSignal(0);
-          const [hasVotes, setHasVotes] = createSignal(false);
-          const [currentUserVote, setCurrentUserVote] = createSignal(0);
+          const votesCount = newSignal(0);
+          const hasVotes = newSignal(false);
+          const currentUserVote = newSignal(0);
           const currentNoteVotes = () => props.votes().filter(r => r.noteId === event().id);
           const currentNoteVotesDeduplicatedByPks = () => {
-            const grouped = new Map<Pk, ReactionEvent[]>();
-            currentNoteVotes().forEach((r: ReactionEvent) => {
-              if (!grouped.has(r.pk)) {
-                grouped.set(r.pk, []);
-              }
-              grouped.get(r.pk)!.push(r);
-            });
-            return [...grouped.values()]
-              .map(reactionEvents => sortByDate(reactionEvents)[0]);
+            const grouped = Map.groupBy(currentNoteVotes(), r => r.pk);
+            return [...grouped.values()].map(reactionEvents => sortByDate(reactionEvents)[0]);
           };
 
           const getSigner = async () => {
@@ -91,16 +98,16 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
           createEffect(() => {
             batch(() => {
               const votes = currentNoteVotesDeduplicatedByPks();
-              setHasVotes(votes.length > 0);
+              hasVotes(votes.length > 0);
 
               const newVoteCount = votes
                 .map(r => voteKind(r) as number)
                 .reduce((sum, i) => sum + i, 0);
-              setVotesCount(newVoteCount);
+              votesCount(newVoteCount);
 
               const signer = signersStore.active;
               const kind: VoteKind = (signer && votes.filter(r => r.pk === signer!.pk).map(r => voteKind(r))[0]) || 0;
-              setCurrentUserVote(kind);
+              currentUserVote(kind);
             });
           });
 
@@ -162,14 +169,14 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
           const MAX_LENGTH = 255;
           const [target, setTarget] = createSignal<HTMLElement>();
 
-          const [profilePicture, setProfilePicture] = createSignal(defaultPicture);
+          const profilePicture = newSignal(defaultPicture);
 
           const pubkey = () => event().pk;
           const npub = () => npubEncode(pubkey());
           const profile = () => profiles().find(p => p.pk === pubkey());
 
           createEffect(async () => {
-            setProfilePicture(profile()?.i || defaultPicture);
+            profilePicture(profile()?.i || defaultPicture);
           });
 
           // Update createdAt every minute
@@ -210,20 +217,12 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
             clearInterval(timer);
           });
 
-          const parsedContent = createMemo(() => {
-            const result = parseContent(event(), store, props.articles());
-            if (!overflowed() && result.length > MAX_LENGTH) {
-              setOverflowed(true);
-            }
-            return result;
-          });
-
           return <div class="ztr-comment">
             <div class="ztr-comment-body">
               <div class="ztr-comment-info-wrapper">
                 <div class="ztr-comment-info">
                   <div class="ztr-comment-info-picture">
-                    <img src={profilePicture()} onerror={() => setProfilePicture(defaultPicture)} />
+                    <img src={profilePicture()} onerror={() => profilePicture(defaultPicture)} />
                   </div>
                   <ul class="ztr-comment-info-items">
                     <li class="ztr-comment-info-author">
@@ -240,13 +239,13 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
 
               <div
                 ref={setTarget}
-                classList={{ "ztr-comment-text": true, "ztr-comment-text-fade": overflowed() && !isExpanded(), "highlight": event().k == 9802 }}
-                innerHTML={parsedContent()}>
+                classList={{ "ztr-comment-text": true, "ztr-comment-text-fade": overflowed() && context().text.collapsed(), "highlight": event().k == 9802 }}
+                innerHTML={context().text.value}>
               </div>
 
               {overflowed() &&
-                <div class="ztr-comment-expand" onClick={() => setExpanded(!isExpanded())}>
-                  <span>{isExpanded() ? 'Show less' : 'Read more'}</span>
+                <div class="ztr-comment-expand" onClick={() => trigger(context().text.collapsed)}>
+                  <span>{!context().text.collapsed() ? 'Show less' : 'Read more'}</span>
                 </div>}
 
               <ul class="ztr-comment-actions">
@@ -276,17 +275,18 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
                 <Show when={!store.disableFeatures!.includes('reply')}>
                   <li class="ztr-comment-action-reply" onClick={() => {
                     store.userStartedReadingComments = true;
-                    setOpen(!isOpen());
+                    trigger(context().reply.isOpen);
                   }}>
                     {replySvg()}
-                    <span>{isOpen() ? 'Cancel' : 'Reply'}</span>
+                    <span>{context().reply.isOpen() ? 'Cancel' : 'Reply'}</span>
                   </li>
                 </Show>
               </ul>
-              {isOpen() &&
+              {context().reply.isOpen() &&
                 <ReplyEditor replyTo={event().id} onDone={() => {
-                  setThreadCollapsed(false);
-                  setOpen(false);
+                  const c = context();
+                  c.thread.setCollapsed(false);
+                  c.reply.isOpen(false);
                 }} />}
             </div>
 
@@ -294,17 +294,17 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               <div class="ztr-comment-replies-info-actions">
                 {total() > 0 &&
                 <>
-                  <ul class="ztr-comment-replies-info-items" classList={{selected: isThreadCollapsed()}}
+                  <ul class="ztr-comment-replies-info-items" classList={{selected: context().thread.collapsed() === true}}
                     onClick={() => {
                       store.userStartedReadingComments = true;
-                      setThreadCollapsed(!isThreadCollapsed());
+                      context().thread.trigger();
                     }}>
-                    <li><span>{isThreadCollapsed() ? upArrow() : downArrow()}</span></li>
-                    {isThreadCollapsed() && <li>{total()} repl{total() > 1 ? 'ies' : 'y'}</li>}
+                    <li><span>{context().thread.collapsed() === true ? upArrow() : downArrow()}</span></li>
+                    {context().thread.collapsed() === true && <li>{total()} repl{total() > 1 ? 'ies' : 'y'}</li>}
                   </ul>
                 </>}
               </div>
-              {!isThreadCollapsed() && <Thread topNestedEvents={() => event().children} articles={props.articles} votes={props.votes} />}
+              {!context().thread.collapsed() && <Thread topNestedEvents={() => event().children} articles={props.articles} votes={props.votes} />}
             </div>
           </div>;
         }

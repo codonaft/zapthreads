@@ -25,7 +25,7 @@ describe("ui utils", () => {
       topRootEventIds: new Set,
       userObservedComments: false,
       userStartedReadingComments: false,
-      threadCollapsed: new Map,
+      commentContexts: new Map,
       messageExpanded: new ReactiveSet,
       disableFeatures: [],
       urlPrefixes: parseUrlPrefixes('naddr:nostr.com/,')

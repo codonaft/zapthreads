@@ -6,6 +6,8 @@ import { Filter } from "nostr-tools/filter";
 import { WindowNostr } from "nostr-tools/nip07";
 import { Profile, Eid, Pk } from "./models.ts";
 import { createMutable } from "solid-js/store";
+import { Accessor, Setter } from "solid-js";
+import { Signal } from "./solidjs.ts";
 import { NestedNoteEvent } from "./nest.ts";
 
 // Global data (for now)
@@ -18,7 +20,7 @@ export const store = createMutable<PreferencesStore>({
   topRootEventIds: new Set,
   userObservedComments: false,
   userStartedReadingComments: false,
-  threadCollapsed: new Map,
+  commentContexts: new Map,
   messageExpanded: new ReactiveSet,
 
   languages: [],
@@ -56,6 +58,22 @@ export const isDisableType = (type: string): type is DisableType => {
   return _types.includes(type as DisableType);
 };
 
+export type CommentContext = {
+  thread: {
+    collapsed: Accessor<boolean | undefined>;
+    setCollapsed: Setter<boolean| undefined>;
+    trigger: () => void;
+  },
+  text: {
+    value: string;
+    collapsed: Signal<boolean>;
+  },
+  reply: {
+    text: Signal<string>;
+    isOpen: Signal<boolean>;
+  }
+};
+
 export type PreferencesStore = {
   anchor?: Anchor, // derived from anchor prop
   readRelays: string[];
@@ -65,7 +83,7 @@ export type PreferencesStore = {
   topRootEventIds: Set<Eid>,
   userObservedComments: boolean,
   userStartedReadingComments: boolean,
-  threadCollapsed: Map<Eid, boolean>,
+  commentContexts: Map<Eid, CommentContext>,
   messageExpanded: ReactiveSet<Eid>,
 
   languages: string[],
