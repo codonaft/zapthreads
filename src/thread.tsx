@@ -55,6 +55,8 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               return commentContext;
             }
           };
+
+          const MAX_LENGTH = 255;
           const overflowed = () => context().text.value.length > MAX_LENGTH;
 
           createEffect(on([userObservedComments, tooLongCommentsSection], () => {
@@ -166,9 +168,6 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
             }
           };
 
-          const MAX_LENGTH = 255;
-          const [target, setTarget] = createSignal<HTMLElement>();
-
           const profilePicture = newSignal(defaultPicture);
 
           const pubkey = () => event().pk;
@@ -238,7 +237,6 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               {isDifferentVersion() && <div class="ztr-comment-text"><p class="warning">{warningSvg()}<span>Article contents changed since this {action()} was made</span></p></div>}
 
               <div
-                ref={setTarget}
                 classList={{ "ztr-comment-text": true, "ztr-comment-text-fade": overflowed() && context().text.collapsed(), "highlight": event().k == 9802 }}
                 innerHTML={context().text.value}>
               </div>

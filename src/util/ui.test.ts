@@ -26,7 +26,6 @@ describe("ui utils", () => {
       userObservedComments: false,
       userStartedReadingComments: false,
       commentContexts: new Map,
-      messageExpanded: new ReactiveSet,
       disableFeatures: [],
       urlPrefixes: parseUrlPrefixes('naddr:nostr.com/,')
     });

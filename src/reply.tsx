@@ -58,7 +58,7 @@ export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => 
       setLoggedInUser(profile);
       updateProfiles([pk], readRelays(), profiles());
     } else {
-      setLoggedInUser(); // FIXME: if network fails we don't auto-login anymore
+      setLoggedInUser();
     }
   });
 
