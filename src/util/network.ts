@@ -338,12 +338,6 @@ class PrioritizedPool {
   }
 
   async updateWritePow(minReadPow: number) {
-    /*store.validateReadPow = (await Promise.all(store.readRelays.map(async (relayUrl) => {
-      const info = (await find('relayInfos', IDBKeyRange.only(relayUrl)))?.info;
-      const pow = info?.limitation?.min_pow_difficulty || 0;
-      return info?.supported_nips?.includes(13) && pow >= minReadPow;
-    }))).filter(i => i).length === 0;*/
-
     const writeRelaysPows = await Promise.all(store.writeRelays.map(async (relayUrl) => {
       const info = (await find('relayInfos', IDBKeyRange.only(relayUrl)))?.info;
       return info?.limitation?.min_pow_difficulty || 0;

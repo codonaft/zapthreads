@@ -237,7 +237,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       (content.length <= store.maxCommentLength) &&
       !spamEvent &&
       !spamPk &&
-      (/*!store.validateReadPow ||*/ powIsOk(id, powOrTags, minReadPow())) &&
+      powIsOk(id, powOrTags, minReadPow()) &&
       (!store.onReceive || (await store.onReceive(id, kind, content)));
     store.validatedEvents.set(id, valid);
     return valid;
