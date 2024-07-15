@@ -5,7 +5,7 @@ import { createVisibilityObserver } from "@solid-primitives/intersection-observe
 import style from './styles/index.css?raw';
 import { saveRelayLatestForFilter, updateProfiles, totalChildren, parseUrlPrefixes, parseContent, normalizeURL } from "./util/ui.ts";
 import { normalizeURL as nostrNormalizeURL } from "nostr-tools/utils";
-import { fetchRelayInformation, infoExpired, powIsOk, pool, SHORT_TIMEOUT } from "./util/network.ts";
+import { fetchRelayInformation, infoExpired, powIsOk, pool, SHORT_TIMEOUT, NOTE_KINDS } from "./util/network.ts";
 import { nest } from "./util/nest.ts";
 import { store, isDisableType, signersStore } from "./util/stores.ts";
 import { HOUR_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, sortByDate, currentTime } from "./util/date-time.ts";
@@ -270,8 +270,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       sub = null;
     });
 
-    const noteKinds = [1, 9802];
-    const kinds = [...noteKinds, 7, 9735];
+    const kinds = [...NOTE_KINDS, 7, 9735];
     // TODO restore with a specific `since` for aggregates
     // (leaving it like this will fail when re-enabling likes/zaps)
     // if (!store.disableFeatures().includes('likes')) {
@@ -284,7 +283,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     console.log(`[zapthreads] subscribing to ${_anchor.value} on`, [..._readRelays]);
 
     const queryNoteRootEvent = !store.anchorAuthor && anchor().type === 'note';
-    const rootEventFilter = queryNoteRootEvent ? [{ ids: [anchor().value], kinds: noteKinds, limit: 1 }] : [];
+    const rootEventFilter = queryNoteRootEvent ? [{ ids: [anchor().value], kinds: NOTE_KINDS, limit: 1, since: 0 }] : [];
     const request = (url: string) => [url, [...rootEventFilter, { ..._filter, kinds }]];
 
     const newLikeIds = new Set<string>();
@@ -296,7 +295,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         onevent(e) {
           (async () => {
             const valid = await validEvent(e.id, e.pubkey, e.tags, e.kind, e.content);
-            if (noteKinds.includes(e.kind)) {
+            if (NOTE_KINDS.includes(e.kind)) {
               const isNoteRootEvent = queryNoteRootEvent && !store.anchorAuthor && e.id === anchor().value;
               if (isNoteRootEvent || (valid && e.content.trim())) {
                 if (isNoteRootEvent) {

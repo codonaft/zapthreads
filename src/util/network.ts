@@ -18,6 +18,8 @@ const STATS_SIZE = 5;
 const LONG_TIMEOUT = 7000;
 export const SHORT_TIMEOUT = Math.max(LONG_TIMEOUT * 0.8, LONG_TIMEOUT - 1000);
 
+export const NOTE_KINDS = [1, 9802];
+
 class PrioritizedPool {
   private relays = new Map<string, AbstractRelay>()
   public seenOn: Map<Eid, Set<string>> = new Map()
@@ -74,7 +76,14 @@ class PrioritizedPool {
       if (!fastOrSlowRelays.has(relayUrl)) continue;
 
       const since = relayToSince[relayUrl];
-      const newFilters: Filter[] = filters.map(f => { return { ...f, since }; });
+      const newFilters: Filter[] = filters.map((f: Filter) => {
+        const isNote = f.kinds && NOTE_KINDS.filter(k => f.kinds!.includes(k)).length > 0;
+        if (f.since === undefined && isNote) {
+          return { ...f, since };
+        } else {
+          return f;
+        }
+      });
 
       requests.push({
         url: relayUrl,
