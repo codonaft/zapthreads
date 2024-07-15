@@ -88,7 +88,7 @@ export type RelayStats = {
 
 export type Spam = {
   id: string;
-  addedAt: number; // TODO
+  addedAt: number;
   used: boolean;
 };
 
@@ -142,7 +142,7 @@ export interface ZapthreadsSchema extends DBSchema {
       'by-name': string;
     };
   };
-  eventsSpam: {
+  eventsSpam: { // TODO: Block
     key: string;
     value: Spam;
   };

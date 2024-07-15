@@ -19,6 +19,8 @@ import { Event } from "nostr-tools/core";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { Filter } from "nostr-tools/filter";
 import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, RelayInfo, Eid, Pk, Spam } from "./util/models.ts";
+import { updateSpamFilters, loadSpamFilters, useSpamBlock } from "./util/spam.ts";
+
 import { SubCloser } from "nostr-tools/pool";
 
 const ZapThreads = (props: { [key: string]: string; }) => {
@@ -95,80 +97,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   };
 
   createEffect(on([rawReadRelays], updateRelays));
-
-  const loadSpamFilters = async () => {
-    const now = currentTime();
-    const lastUpdate = Math.max(...await Promise.all(['events', 'pubkeys'].map(
-      async (view: string) => {
-        // @ts-ignore
-        const fromStore = store.spam[view];
-        const type = `${view}Spam`;
-        let lastUpdate = 0;
-        const outdatedIds = [];
-        // @ts-ignore
-        const items: Spam[] = await findAll(type);
-        for (const i of items) {
-          lastUpdate = Math.max(lastUpdate, i.addedAt);
-          if (!i.used && now >= i.addedAt + WEEK_IN_SECS) {
-            outdatedIds.push(i.id);
-          } else {
-            // @ts-ignore
-            fromStore.add(i.id);
-          }
-        }
-        // @ts-ignore
-        remove(type, outdatedIds);
-        return lastUpdate;
-      }
-    )));
-    return lastUpdate;
-  }
-
-  const updateSpamFilters = async (lastUpdateSpamFilters: number) => {
-    if (disableFeatures().includes('spamNostrBand')) {
-      return;
-    }
-
-    const now = currentTime();
-    const deadline = lastUpdateSpamFilters + DAY_IN_SECS;
-    if (now < deadline) {
-      console.log(`[zapthreads] spam filters will be updated in ${((deadline - now) / HOUR_IN_SECS).toFixed(1)} hours`);
-      return;
-    }
-
-    await Promise.allSettled(['events', 'pubkeys'].map(async (view) => {
-      const API_METHOD = 'https://spam.nostr.band/spam_api?method=get_current_spam';
-      try {
-        const request = fetch(`${API_METHOD}&view=${view}`, {
-          signal: AbortSignal.timeout(SHORT_TIMEOUT),
-        });
-        const type = `${view}Spam`;
-
-        // @ts-ignore
-        const fromStore = store.spam[view];
-
-        const response = await request;
-        if (response.status === 200) {
-          const newIds = (await response.json())[`cluster_${view}`]
-            .map((i: any) => i[view])
-            .flat()
-            .filter((id: string) =>
-              // @ts-ignore
-              !fromStore.has(id)
-            );
-          newIds.forEach((id: string) => {
-            // @ts-ignore
-            fromStore.add(id);
-            // @ts-ignore
-            save(type, { id, addedAt: now, used: false });
-          });
-        }
-      } catch (e) {
-        console.error(e);
-      }
-    }));
-    console.log('[zapthreads] updated spam filters');
-  };
 
   const anchor = () => store.anchor!;
   const readRelays = () => store.readRelays;
@@ -294,10 +222,21 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     if (store.validatedEvents.has(id)) {
       return store.validatedEvents.get(id)!;
     }
+
+    const spamEvent = store.spam.events.has(id);
+    if (spamEvent) {
+      useSpamBlock('eventsSpam', id);
+    }
+
+    const spamPk = store.spam.pubkeys.has(pk);
+    if (spamPk) {
+      useSpamBlock('pubkeysSpam', pk);
+    }
+
     const valid =
       (content.length <= store.maxCommentLength) &&
-      !store.spam.events.has(id) &&
-      !store.spam.pubkeys.has(pk) &&
+      !spamEvent &&
+      !spamPk &&
       (/*!store.validateReadPow ||*/ powIsOk(id, powOrTags, minReadPow())) &&
       (!store.onReceive || (await store.onReceive(id, kind, content)));
     store.validatedEvents.set(id, valid);
