@@ -5,7 +5,7 @@ import { createVisibilityObserver } from "@solid-primitives/intersection-observe
 import style from './styles/index.css?raw';
 import { saveRelayLatestForFilter, updateProfiles, totalChildren, parseUrlPrefixes, parseContent, normalizeURL } from "./util/ui.ts";
 import { normalizeURL as nostrNormalizeURL } from "nostr-tools/utils";
-import { fetchRelayInformation, infoExpired, powIsOk, pool, SHORT_TIMEOUT, NOTE_KINDS } from "./util/network.ts";
+import { fetchRelayInformation, infoExpired, powIsOk, pool, NOTE_KINDS } from "./util/network.ts";
 import { nest } from "./util/nest.ts";
 import { store, isDisableType, signersStore } from "./util/stores.ts";
 import { HOUR_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, sortByDate, currentTime } from "./util/date-time.ts";
@@ -18,10 +18,9 @@ import { RelayRecord } from "nostr-tools/relay";
 import { Event } from "nostr-tools/core";
 import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
 import { Filter } from "nostr-tools/filter";
+import { SubCloser } from "nostr-tools/pool";
 import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, RelayInfo, Eid, Pk, Spam } from "./util/models.ts";
 import { updateSpamFilters, loadSpamFilters, useSpamBlock } from "./util/spam.ts";
-
-import { SubCloser } from "nostr-tools/pool";
 
 const ZapThreads = (props: { [key: string]: string; }) => {
   const minReadPow = () => +props.minReadPow;

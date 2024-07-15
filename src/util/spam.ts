@@ -2,7 +2,7 @@ import { Spam } from "./models.ts";
 import { store } from "./stores.ts";
 import { find, findAll, save, remove } from "./db.ts";
 import { HOUR_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, currentTime } from "./date-time.ts";
-import { SHORT_TIMEOUT } from "./network.ts";
+import { shortFetch } from "./network.ts";
 
 const disabled = () => store.disableFeatures!.includes('spamNostrBand');
 
@@ -18,9 +18,7 @@ export const updateSpamFilters = async (lastUpdateSpamFilters: number) => {
   await Promise.allSettled(['events', 'pubkeys'].map(async (view) => {
     const API_METHOD = 'https://spam.nostr.band/spam_api?method=get_current_spam';
     try {
-      const request = fetch(`${API_METHOD}&view=${view}`, {
-        signal: AbortSignal.timeout(SHORT_TIMEOUT),
-      });
+      const request = shortFetch(`${API_METHOD}&view=${view}`);
       const type = `${view}Spam`;
 
       // @ts-ignore

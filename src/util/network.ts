@@ -16,7 +16,7 @@ import { getRelayLatest } from "./ui.ts";
 
 const STATS_SIZE = 5;
 const LONG_TIMEOUT = 7000;
-export const SHORT_TIMEOUT = Math.max(LONG_TIMEOUT * 0.8, LONG_TIMEOUT - 1000);
+const SHORT_TIMEOUT = Math.max(LONG_TIMEOUT * 0.8, LONG_TIMEOUT - 1000);
 
 export const NOTE_KINDS = [1, 9802];
 
@@ -509,9 +509,8 @@ export const rankRelays = async (relays: string[], options?: { kind?: number; ev
 
 export const fetchRelayInformation = async (url: string): Promise<RelayInformation> =>
   (await (
-    await fetch(url.replace('ws://', 'http://').replace('wss://', 'https://'), {
+    await shortFetch(url.replace('ws://', 'http://').replace('wss://', 'https://'), {
       headers: { Accept: 'application/nostr+json' },
-      signal: AbortSignal.timeout(SHORT_TIMEOUT),
     })
   ).json()) as RelayInformation;
 
@@ -534,6 +533,11 @@ const countResults = <T>(results: PromiseSettledResult<T>[], relays: string[]) =
   }
   return { ok, failures };
 };
+
+export const shortFetch = (url: string, options?: any) => fetch(url, {
+  ...options,
+  signal: AbortSignal.timeout(SHORT_TIMEOUT),
+});
 
 // TODO: move
 export const sign = async (unsignedEvent: UnsignedEvent, signer: EventSigner) => {
