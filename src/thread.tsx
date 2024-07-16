@@ -287,7 +287,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
                 </Show>
               </ul>
               {context().reply.isOpen() &&
-                <ReplyEditor replyTo={event().id} onDone={() => {
+                <ReplyEditor comment={context().reply.text} replyTo={event().id} onDone={() => {
                   const c = context();
                   c.thread.setCollapsed(false);
                   c.reply.isOpen(false);

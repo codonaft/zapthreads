@@ -8,13 +8,15 @@ import { generateSecretKey, getPublicKey, getEventHash, finalizeEvent } from "no
 import { createAutofocus } from "@solid-primitives/autofocus";
 import { find, save, watch } from "./util/db.ts";
 import { Profile, eventToNoteEvent } from "./util/models.ts";
+import { Signal, newSignal } from "./util/solidjs.ts";
 import { lightningSvg, likeSvg, nostrSvg, warningSvg } from "./thread.tsx";
 import { decode, npubEncode } from "nostr-tools/nip19";
 import { Relay } from "nostr-tools/relay";
 import { normalizeURL } from "nostr-tools/utils";
 
-export const ReplyEditor = (props: { replyTo?: string; onDone?: Function; }) => {
-  const [comment, setComment] = createSignal('');
+export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; onDone?: Function; }) => {
+  const comment = () => props.comment();
+  const setComment = (text: string) => props.comment(text);
   const [loading, setLoading] = createSignal(false);
   const [loggedInUser, setLoggedInUser] = createSignal<Profile>();
   const [errorMessage, setErrorMessage] = createSignal('');
@@ -255,6 +257,7 @@ export const RootComment = () => {
   const likesAggregate = watch(() => ['aggregates', IDBKeyRange.only([anchor().value, 7])]);
   const zapCount = () => zapsAggregate()?.sum ?? 0;
   const likeCount = () => likesAggregate()?.ids.length ?? 0;
+  const comment = newSignal('');
 
   return <div class="ztr-comment-new">
     <div class="ztr-comment-body">
@@ -272,7 +275,7 @@ export const RootComment = () => {
           </li>
         </Show>
       </ul>
-      <ReplyEditor />
+      <ReplyEditor comment={comment} />
     </div>
   </div>;
 };
