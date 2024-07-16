@@ -6,6 +6,7 @@ import { Event } from "nostr-tools/core";
 import { matchAll, replaceAll } from "nostr-tools/nip27";
 import nmd from "nano-markdown";
 import { findAll, save } from "./db.ts";
+import { store } from "./stores.ts";
 import { NoteEvent, Profile, Eid } from "./models.ts";
 import { pool, rankRelays } from "./network.ts";
 import { currentTime } from "./date-time.ts";
@@ -86,8 +87,9 @@ export const getRelayLatest = async (anchor: Anchor) => {
 // ({ "#e": store.rootEventIds }, { "#a": [anchor().value] })
 // and not to aggregate or root event queries
 export const saveRelayLatestForFilter = async (anchor: Anchor, events: NoteEvent[]) => {
-  const obj: { [url: string]: number; } = {};
+  if (anchor.type !== 'http' && !store.anchorAuthor) return;
 
+  const obj: { [url: string]: number; } = {};
   for (const e of events) {
     const relaysForEvent = pool.seenOn.get(e.id);
     if (relaysForEvent) {

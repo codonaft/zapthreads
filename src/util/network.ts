@@ -83,7 +83,7 @@ class PrioritizedPool {
         latency: ranks.get(relayUrl)!,
       });
     }
-    console.log(`[zapthreads] subscribing to ${requests.length} relays (${Object.keys(rawRequests).length - requests.length} are failing)`);
+    console.log(`[zapthreads] subscribing to ${requests.length} relays (${Object.keys(rawRequests).length - requests.length} failing)`);
 
     requests.sort((a, b) => {
       if (a.latency !== b.latency) return a.latency - b.latency;
@@ -235,7 +235,7 @@ class PrioritizedPool {
 
     console.log(
       `[zapthreads] publishing to ${fastRelays.length + slowRelays.length} relays` +
-      (unsupported + offlineRelays > 0 ? ` (ignored ${unsupported} unsupported, ${offlineRelays} are failing)` : ''));
+      (unsupported + offlineRelays > 0 ? ` (ignored ${unsupported} unsupported, ${offlineRelays} failing)` : ''));
 
     const result = await this.concurrentPublish(event, fastRelays);
     this.concurrentPublish(event, slowRelays);
@@ -252,7 +252,7 @@ class PrioritizedPool {
     const deltaTime = Date.now() - startTime;
 
     const { ok, failures } = countResults(results, relays);
-    console.log(`[zapthreads] event ${event.id} published in ${deltaTime} ms to ${ok} relays (${failures} failed)`, relays);
+    console.log(`[zapthreads] event ${event.id} published in ${deltaTime} ms to ${ok} relays (${failures} failing)`, relays);
     return { ok, failures };
   }
 
