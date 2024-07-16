@@ -67,6 +67,7 @@ Arguments:
    - `watch` (when disabled queries relays and closes the connection immediately on EOSE)
    - `replyAnonymously` (when disabled requires logging in in order to publish)
    - `hideContent` (when disabled it shows the content if the anchor is a naddr)
+   - `relayInformation` (when disabled NIP-11 relay filtering is off)
    - `spamNostrBand`
  - `urls`: comma-separated pairs of URLs
    - defaults to `naddr:nostr.com/,npub:nostr.com/,nprofile:nostr.com/,nevent:nostr.com/,note:nostr.com/,tag:snort.social/t/`

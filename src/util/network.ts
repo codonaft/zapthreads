@@ -4,7 +4,7 @@ import { SubCloser, AbstractPoolConstructorOptions, SubscribeManyParams } from "
 import { AbstractRelay as AbstractRelay, SubscriptionParams, Subscription, type AbstractRelayConstructorOptions } from "nostr-tools/abstract-relay";
 import { getEventHash, verifyEvent } from "nostr-tools/pure";
 import { Relay } from "nostr-tools/relay";
-import { RelayInformation, fetchRelayInformation as internalFetchRelayInformation } from "nostr-tools/nip11";
+import { RelayInformation } from "nostr-tools/nip11";
 import { getPow, minePow } from "nostr-tools/nip13";
 import { npubEncode } from "nostr-tools/nip19";
 import { find, findAll, save, onSaved } from "./db.ts";
@@ -287,6 +287,7 @@ class PrioritizedPool {
   }
 
   async updateRelayInfos(minReadPow: number) {
+    if (store.disableFeatures!.includes('relayInformation')) return;
     const now = currentTime();
     const expiredRelays = [];
     const { fastRelays, slowRelays, offlineRelays } = await rankRelays([...store.readRelays, ...store.writeRelays]);
@@ -498,12 +499,14 @@ export const rankRelays = async (relays: string[], options?: { kind?: number; ev
   return { fastRelays, slowRelays, offlineRelays, unsupported, ranks };
 };
 
-export const fetchRelayInformation = async (url: string): Promise<RelayInformation> =>
-  (await (
+export const fetchRelayInformation = async (url: string): Promise<RelayInformation | undefined> => {
+  if (store.disableFeatures!.includes('relayInformation')) return;
+  return (await (
     await shortFetch(url.replace('ws://', 'http://').replace('wss://', 'https://'), {
       headers: { Accept: 'application/nostr+json' },
     })
   ).json()) as RelayInformation;
+};
 
 export const infoExpired = (now: number, relayInfo?: RelayInfo) => {
   const lastInfoUpdateAttemptAt = relayInfo && relayInfo.l;
