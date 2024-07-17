@@ -64,6 +64,11 @@ export type Profile = {
   i?: string;
 };
 
+export type Session = {
+  pk: string;
+  autoLogin: number;
+};
+
 export type Relay = {
   n: string; // name
   a: string; // anchor
@@ -124,6 +129,13 @@ export interface ZapthreadsSchema extends DBSchema {
       'l': number;
     };
   };
+  sessions: {
+    key: string;
+    value: Session;
+    indexes: {
+      'autoLogin': number;
+    };
+  };
   relays: {
     key: string[];
     value: Relay;
@@ -142,7 +154,7 @@ export interface ZapthreadsSchema extends DBSchema {
       'by-name': string;
     };
   };
-  eventsSpam: { // TODO: Block
+  eventsSpam: {
     key: string;
     value: Spam;
   };
@@ -157,6 +169,7 @@ export const indices: { [key in StoreNames<ZapthreadsSchema>]: any } = {
   'reactions': 'id',
   'aggregates': ['eid', 'k'],
   'profiles': ['pk'],
+  'sessions': 'pk',
   'relays': ['n', 'a'],
   'relayInfos': 'name',
   'relayStats': ['name', 'kind', 'serial'],
@@ -184,6 +197,9 @@ export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion
 
   const profiles = db.createObjectStore('profiles', { keyPath: indices['profiles'] });
   profiles.createIndex('l', 'l');
+
+  const sessions = db.createObjectStore('sessions', { keyPath: indices['sessions'] });
+  sessions.createIndex('autoLogin', 'autoLogin');
 
   const relays = db.createObjectStore('relays', { keyPath: indices['relays'] });
   relays.createIndex('a', 'a');

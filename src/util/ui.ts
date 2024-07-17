@@ -283,3 +283,8 @@ export const normalizeURL = (url: string, removeSlashes: boolean = true): string
   }
   return u.toString();
 };
+
+export const errorText = <T>(exception: T) => {
+  const err = (exception as any)?.reason;
+  return err?.message || String(err);
+};

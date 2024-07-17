@@ -1,18 +1,21 @@
+import { modifyMutable, produce } from "solid-js/store";
 import { UnsignedEvent, Event, Nostr, VerifiedEvent } from "nostr-tools/core";
+import { normalizeURL as nostrNormalizeURL } from "nostr-tools/utils";
 import { Filter } from "nostr-tools/filter";
 import { SubCloser, AbstractPoolConstructorOptions, SubscribeManyParams } from "nostr-tools/pool";
 import { AbstractRelay as AbstractRelay, SubscriptionParams, Subscription, type AbstractRelayConstructorOptions } from "nostr-tools/abstract-relay";
 import { getEventHash, verifyEvent } from "nostr-tools/pure";
-import { Relay } from "nostr-tools/relay";
+import { Relay, RelayRecord } from "nostr-tools/relay";
 import { RelayInformation } from "nostr-tools/nip11";
 import { getPow, minePow } from "nostr-tools/nip13";
 import { npubEncode } from "nostr-tools/nip19";
-import { find, findAll, save, onSaved } from "./db.ts";
-import { EventSigner, store } from "./stores.ts";
-import { Eid, RelayInfo, RelayStats } from "./models.ts";
+import { find, findAll, save, onSaved, remove } from "./db.ts";
+import { EventSigner, store, signersStore } from "./stores.ts";
+import { Eid, RelayInfo, RelayStats, Pk } from "./models.ts";
 import { medianOrZero, maxBy } from "./collections.ts";
 import { currentTime, MIN_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, SIX_HOURS_IN_SECS } from "./date-time.ts";
-import { getRelayLatest } from "./ui.ts";
+import { getRelayLatest, errorText } from "./ui.ts";
+import { waitNostr } from "nip07-awaiter";
 
 const STATS_SIZE = 5;
 const LONG_TIMEOUT = 7000;
@@ -56,6 +59,37 @@ class PrioritizedPool {
     relays.forEach(url => {
       this.relays.get(url)?.close()
     })
+  }
+
+  async updateRelays(rawRelays?: string) {
+    const loggedIn = signersStore.active && window.nostr;
+    const relaysFromExtension = loggedIn ? await window.nostr!.getRelays() : {};
+
+    const splitRelays: RelayRecord =
+      loggedIn && Object.keys(relaysFromExtension).length > 0
+      ? relaysFromExtension
+      : Object.fromEntries(
+          (rawRelays || '')
+            .split(',')
+            .map(r => [r, {read: true, write: !loggedIn}]));
+
+    const relays: RelayRecord = Object.fromEntries(
+      Object
+       .entries(splitRelays)
+       .map(([relayUrl, options]: [string, any]) => [relayUrl.trim(), options])
+       .filter(([relayUrl, options]) => relayUrl.length > 0)
+       .map(([relayUrl, options]) => [nostrNormalizeURL(new URL(relayUrl).toString()), options]));
+
+    const entries = Object.entries(relays);
+    const readRelays = entries.filter(([relayUrl, options]) => options.read).map(([r, _]) => r);
+    modifyMutable(store, produce((store) => {
+      store.writeRelays = entries.filter(([relayUrl, options]) => options.write).map(([r, _]) => r);
+      if (JSON.stringify(store.readRelays) !== JSON.stringify(readRelays)) {
+        store.readRelays = readRelays;
+      }
+    }));
+    console.log(`[zapthreads] readRelays=${JSON.stringify(store.readRelays)} writeRelays=${JSON.stringify(store.writeRelays)}`);
+    await this.updateWritePow();
   }
 
   async subscribeMany(relays: string[], filters: Filter[], params: SubscribeManyParams): Promise<SubCloser> {
@@ -149,7 +183,7 @@ class PrioritizedPool {
       try {
         relay = await this.ensureRelay(url);
       } catch (err) {
-        const reason = (err as any)?.message || String(err);
+        const reason = errorText(err);
         console.log(`[zapthreads] ${url} closed with "${reason}"`);
         handleClose(i, url, reason);
         return;
@@ -286,7 +320,7 @@ class PrioritizedPool {
     }
   }
 
-  async updateRelayInfos(minReadPow: number) {
+  async updateRelayInfos() {
     if (store.disableFeatures!.includes('relayInformation')) return;
     const now = currentTime();
     const expiredRelays = [];
@@ -326,7 +360,7 @@ class PrioritizedPool {
 
     const { ok, failures } = countResults(results, expiredRelays);
     console.log(`[zapthreads] updated infos for ${ok} relays (${failures} failed)`);
-    await onSaved(async () => await this.updateWritePow(minReadPow));
+    await onSaved(async () => await this.updateWritePow());
   }
 
   private async updateRelayInfo(relayUrl: string, newRelayInfo: any) {
@@ -338,12 +372,12 @@ class PrioritizedPool {
     });
   }
 
-  async updateWritePow(minReadPow: number) {
+  private async updateWritePow() {
     const writeRelaysPows = await Promise.all(store.writeRelays.map(async (relayUrl) => {
       const info = (await find('relayInfos', IDBKeyRange.only(relayUrl)))?.info;
       return info?.limitation?.min_pow_difficulty || 0;
     }));
-    store.writePowDifficulty = Math.max(minReadPow, ...writeRelaysPows);
+    store.writePowDifficulty = Math.max(store.minReadPow, ...writeRelaysPows);
   }
 }
 
@@ -492,7 +526,6 @@ export const rankRelays = async (relays: string[], options?: { kind?: number; ev
     .map(({ relayUrl }) => relayUrl);
 
   if (fastRelays.length === 0) {
-    console.log('[zapthreads] all supported relays are probably unavailable', relays);
     return { fastRelays: slowRelays, slowRelays: [], offlineRelays: 0, ranks, unsupported };
   }
 
@@ -554,4 +587,96 @@ export const signAndPublishEvent = async (unsignedEvent: UnsignedEvent, signer: 
   const event = await sign(unsignedEvent, signer);
   const { ok, failures } = await pool.publishEvent(event);
   return { ok, failures, event };
+};
+
+export const loginIfKnownUser = async () => {
+  waitNostr(0);
+
+  const session = await find('sessions', 1, { index: 'autoLogin' });
+  if (!session) return;
+
+  const nostr = await waitNostr(1000);
+  if (!nostr) {
+    console.log('[zapthreads] nip-07 is probably removed');
+    return;
+  }
+
+  const pubkey = await nostr.getPublicKey();
+  if (pubkey !== session.pk) {
+    console.log('[zapthreads] unknown user, disabling auto-login');
+    save('sessions', { ...session, autoLogin: 0 });
+    return;
+  }
+
+  if (store.onLogin && !(await store.onLogin(true))) return;
+
+  signersStore.active = {
+    pk: pubkey,
+    signEvent: async (event: UnsignedEvent) => await nostr.signEvent(event),
+  };
+};
+
+export const manualLogin = async () => {
+  if (signersStore.active) return signersStore.active;
+
+  let pk: Pk | undefined;
+  const sessions = await findAll('sessions', +false, { index: 'autoLogin' });
+  if (sessions.length > 0) {
+    if (!window.nostr) {
+      throw new Error('No NIP-07 extension!');
+    }
+    pk = await window.nostr!.getPublicKey();
+    const session = sessions.find(s => s.pk === pk);
+    if (session) {
+      if (store.onLogin && await store.onLogin(true)) {
+        console.log('[zapthreads] re-enabling auto-login');
+        signersStore.active = {
+          pk,
+          signEvent: async (event: UnsignedEvent) => await window.nostr!.signEvent(event),
+        };
+        save('sessions', { ...session, autoLogin: +true });
+      } else {
+        // @ts-ignore
+        remove('sessions', [pk]);
+      }
+      return;
+    }
+  }
+
+  const { accepted, autoLogin } = store.onLogin
+    ? await store.onLogin(false)
+    : { accepted: true, autoLogin: false };
+  if (!accepted) return;
+
+  if (!window.nostr) {
+    throw new Error('No NIP-07 extension!');
+  }
+  pk ||= await window.nostr!.getPublicKey();
+
+  signersStore.active = {
+    pk,
+    signEvent: async (event: UnsignedEvent) => await window.nostr!.signEvent(event),
+  };
+
+  if (!signersStore.active.signEvent) {
+    console.error('User has no signer!');
+  }
+
+  if (autoLogin) {
+    save('sessions', { pk, autoLogin: +autoLogin });
+  }
+
+  await pool.updateRelays();
+  return signersStore.active;
+};
+
+export const logout = async () => {
+  if (!signersStore.active) return;
+  const session = await find('sessions', IDBKeyRange.only(signersStore.active.pk));
+  const pk = session?.pk;
+  if (pk) {
+    // @ts-ignore
+    remove('sessions', [pk]);
+  }
+  signersStore.active = undefined;
 };

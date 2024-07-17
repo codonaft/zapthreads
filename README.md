@@ -2,7 +2,9 @@
 
 A threaded web commenting system built on Nostr. Inspired by [stacker.news](https://stacker.news) and [NoComment](https://github.com/fiatjaf/nocomment).
 
-Try it out:
+NIP-07-only fork with additional features.
+
+Compare with upstream version:
  - [https://zapthreads.dev](https://zapthreads.dev)
  - Any article on [Habla.news](https://habla.news)
 
@@ -51,10 +53,8 @@ Arguments:
    - NIP-19 naddr, note, nevent or URL from where to retrieve events
  - `version`
    - ID of the event to show in case a naddr (long-form note) has multiple versions
- - `read-relays`: comma-separated list of read-only relays, unset by default (will not load any content)
- - `user`:
-   - npub to log in the user as (they will only be able to sign with a NIP-07 extension)
-   - nsec is also supported
+ - `relays`: comma-separated list of relays, unset by default (will not load any content)
+   - if any relays are set in the NIP-07 extension — `relays` will be overwritten after logging in
  - `author`:
    - This npub will be added as a `p` tag to all comments
    - Useful for notifying the author of a website (http anchor)
@@ -86,8 +86,7 @@ Arguments:
 ```html
 <zap-threads 
   anchor="naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk6zne58wzh0waycrqsqqqa28pjfdhz"
-  user="npub1wf4pufsucer5va8g9p0rj5dnhvfeh6d8w0g6eayaep5dhps6rsgs43dgh9"
-  read-relays="wss://relay.nostr.band,wss://nostr-pub.wellorder.net/"
+  relays="wss://relay.nostr.band,wss://nostr-pub.wellorder.net/"
   disable="likes"
   />
 ```
@@ -116,9 +115,11 @@ document.querySelector('zap-threads').shadowRoot.appendChild(style);
 ### Callbacks
 ```js
 ZapThreads
-  .onLogin(async () => {
-    // show some dialog here, etc.
-    return true; // user accepted rules
+  .onLogin(async (knownUser) => {
+    if (!knownUser) {
+      // custom consent dialog that normal user probably doesn't read anyway
+    }
+    return { accepted: true, autoLogin: true };
   })
   .onPublish(async (id, kind, content) => {
     return (kind === 1 || kind === 7) && content.length < 1000;

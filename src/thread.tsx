@@ -1,7 +1,7 @@
 import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on } from "solid-js";
-import { defaultPicture, parseContent, shortenEncodedId, svgWidth, totalChildren } from "./util/ui.ts";
+import { defaultPicture, parseContent, shortenEncodedId, svgWidth, totalChildren, errorText } from "./util/ui.ts";
 import { DAY_IN_SECS, WEEK_IN_SECS, currentTime, sortByDate, timeAgo } from "./util/date-time.ts";
-import { signAndPublishEvent } from "./util/network.ts";
+import { signAndPublishEvent, manualLogin } from "./util/network.ts";
 import { ReplyEditor } from "./reply.tsx";
 import { NestedNoteEvent } from "./util/nest.ts";
 import { noteEncode, npubEncode } from "nostr-tools/nip19";
@@ -85,23 +85,12 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
           };
 
           const getSigner = async () => {
-            if (store.onLogin) {
-              const acceptedLogin = await store.onLogin();
-              if (!acceptedLogin) {
-                return;
-              }
+            try {
+              return await manualLogin();
+            } catch (e) {
+              console.error(errorText(e));
             }
-            if (!signersStore.active) {
-              console.error('Error: active signer is not set!');
-              return;
-            }
-            const signer: EventSigner = signersStore.active!;
-            if (!signer?.signEvent) {
-              console.error('Error: User has no signer!');
-              return;
-            }
-            return signer;
-          }
+          };
 
           createEffect(() => {
             batch(() => {

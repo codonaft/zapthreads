@@ -1,11 +1,10 @@
-import { JSX, createComputed, createEffect, createMemo, createSignal, on, onCleanup, batch } from "solid-js";
-import { modifyMutable, produce } from "solid-js/store";
+import { JSX, createComputed, createEffect, createMemo, createSignal, on, onMount, onCleanup, batch } from "solid-js";
 import { customElement } from 'solid-element';
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer";
 import style from './styles/index.css?raw';
 import { saveRelayLatestForFilter, updateProfiles, totalChildren, parseUrlPrefixes, parseContent, normalizeURL } from "./util/ui.ts";
 import { normalizeURL as nostrNormalizeURL } from "nostr-tools/utils";
-import { fetchRelayInformation, infoExpired, powIsOk, pool } from "./util/network.ts";
+import { fetchRelayInformation, infoExpired, powIsOk, pool, loginIfKnownUser } from "./util/network.ts";
 import { nest } from "./util/nest.ts";
 import { store, isDisableType, signersStore } from "./util/stores.ts";
 import { HOUR_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, sortByDate, currentTime } from "./util/date-time.ts";
@@ -16,7 +15,7 @@ import { clear as clearCache, find, findAll, save, remove, watchAll, onSaved } f
 import { decode, npubEncode } from "nostr-tools/nip19";
 import { RelayRecord } from "nostr-tools/relay";
 import { Event } from "nostr-tools/core";
-import { finalizeEvent, getPublicKey } from "nostr-tools/pure";
+import { finalizeEvent, getPublicKey, UnsignedEvent  } from "nostr-tools/pure";
 import { Filter } from "nostr-tools/filter";
 import { SubCloser } from "nostr-tools/pool";
 import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, RelayInfo, Eid, Pk, Spam } from "./util/models.ts";
@@ -58,44 +57,20 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     store.replyPlaceholder = props.replyPlaceholder;
     store.languages = props.languages.split(',').map(e => e.trim()).filter(i => i.length > 0);
     store.maxCommentLength = +props.maxCommentLength || Infinity;
-    store.writePowDifficulty = Math.max(store.writePowDifficulty, minReadPow());
+    store.minReadPow = minReadPow();
     store.maxWritePow = maxWritePow();
+    store.writePowDifficulty = Math.max(store.writePowDifficulty, minReadPow());
   });
 
-  const rawReadRelays = () => props.readRelays;
+  onMount(async () => {
+    window.addEventListener('beforenostrupdate', (e) => {
+      signersStore.active = undefined;
+    });
 
-  const updateRelays = async () => {
-    const now = currentTime();
-
-    const rawRelays: RelayRecord =
-      signersStore.active && window.nostr
-      ? await window.nostr.getRelays()
-      : Object.fromEntries(
-          (props.readRelays || '')
-            .split(',')
-            .map(i => i.trim())
-            .filter(i => i.length > 0)
-            .map(r => [r, {read: true, write: false}]));
-
-    const relays: RelayRecord = Object.fromEntries(
-      Object
-       .entries(rawRelays)
-       .map(([relayUrl, options]: [string, any]) => [relayUrl.trim(), options])
-       .filter(([relayUrl, options]) => relayUrl.length > 0)
-       .map(([relayUrl, options]) => [nostrNormalizeURL(new URL(relayUrl).toString()), options]));
-
-    const entries = Object.entries(relays);
-    const readRelays = entries.filter(([relayUrl, options]) => options.read).map(([r, _]) => r);
-    modifyMutable(store, produce((store) => {
-      store.writeRelays = entries.filter(([relayUrl, options]) => options.write).map(([r, _]) => r);
-      if (JSON.stringify(store.readRelays) !== JSON.stringify(readRelays)) {
-        store.readRelays = readRelays;
-      }
-    }));
-    await pool.updateWritePow(minReadPow());
-  };
-
-  createEffect(on([rawReadRelays], updateRelays));
+    if (signersStore.active) return;
+    await loginIfKnownUser();
+    await pool.updateRelays(props.relays);
+  });
 
   const anchor = () => store.anchor!;
   const readRelays = () => store.readRelays;
@@ -115,9 +90,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
   // Anchors -> root events
   createComputed(on([anchor, readRelays], async () => {
-    const _relays = readRelays();
-    if (_relays.length === 0) return;
-
     if (store.rootEventIds.length > 0 || anchor().type === 'error') return;
 
     let filterForRemoteRootEvents: Filter;
@@ -151,6 +123,9 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         break;
       default: throw 'error';
     }
+
+    const _relays = readRelays();
+    if (_relays.length === 0) return;
 
     // No `since` here as we are not keeping track of a since for root events
     const remoteRootEvents = await pool.querySync(_relays, { ...filterForRemoteRootEvents });
@@ -354,7 +329,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
             await updateSpamFilters(lastUpdateSpamFilters);
             await pool.estimateWriteRelayLatencies();
-            await pool.updateRelayInfos(minReadPow());
+            await pool.updateRelayInfos();
 
             if (closeOnEose()) {
               sub?.close();
@@ -367,64 +342,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         }
       }
     );
-  }, { defer: true }));
-
-  // Login external npub/nsec
-  const npubOrNsec = () => props.user;
-
-  // Auto login when external pubkey supplied
-  createComputed(on(npubOrNsec, (_) => {
-    if (_) {
-      let pubkey: string;
-      let sk: Uint8Array | undefined;
-      if (_.startsWith('nsec')) {
-        /*sk = decode(_).data as Uint8Array;
-        pubkey = getPublicKey(sk);*/
-        return;
-      } else if (_.startsWith('npub')) {
-        pubkey = decode(_).data as string;
-      } else {
-        pubkey = _;
-      }
-      signersStore.external = {
-        pk: pubkey,
-        signEvent: async (event) => {
-          // Sign with private key if nsec was provided
-          if (sk) {
-            return { sig: finalizeEvent(event, sk).sig };
-          }
-
-          // We validate here in order to delay prompting the user as much as possible
-          if (!window.nostr) {
-            alert('Please log in with a NIP-07 extension such as Alby or nos2x');
-            signersStore.active = undefined;
-            throw 'No extension available';
-          }
-
-          const extensionPubkey = await window.nostr!.getPublicKey();
-          const loggedInPubkey = pubkey;
-          if (loggedInPubkey !== extensionPubkey) {
-            // If zapthreads was passed a different pubkey then error
-            const error = `ERROR: Event not signed. Supplied pubkey does not match extension pubkey. ${loggedInPubkey} !== ${extensionPubkey}`;
-            signersStore.active = undefined;
-            alert(error);
-            throw error;
-          } else {
-            return window.nostr!.signEvent(event);
-          }
-
-        }
-      };
-      signersStore.active = signersStore.external;
-      updateRelays();
-    }
-  }));
-
-  // Log out when external npub/nsec is absent
-  createComputed(on(npubOrNsec, (_) => {
-    if (!_) {
-      signersStore.active = undefined;
-    }
   }, { defer: true }));
 
   const articles = watchAll(() => ['events', 30023, { index: 'k' }]);
@@ -544,8 +461,7 @@ export default ZapThreads;
 customElement<ZapThreadsAttributes>('zap-threads', {
   anchor: "",
   version: "",
-  'read-relays': "",
-  user: "",
+  relays: "",
   author: "",
   disable: "",
   urls: "",
@@ -559,8 +475,7 @@ customElement<ZapThreadsAttributes>('zap-threads', {
   return <ZapThreads
     anchor={props['anchor'] ?? ''}
     version={props['version'] ?? ''}
-    readRelays={props['read-relays'] ?? ''}
-    user={props['user'] ?? ''}
+    relays={props['relays'] ?? ''}
     author={props['author'] ?? ''}
     disable={props['disable'] ?? ''}
     urls={props['urls'] ?? ''}
@@ -574,10 +489,10 @@ customElement<ZapThreadsAttributes>('zap-threads', {
 });
 
 export type ZapThreadsAttributes = {
-  [key in 'anchor' | 'version' | 'read-relays' | 'user' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'languages' | 'max-comment-length' | 'min-read-pow' | 'max-write-pow']?: string;
+  [key in 'anchor' | 'version' | 'relays' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'languages' | 'max-comment-length' | 'min-read-pow' | 'max-write-pow']?: string;
 } & JSX.HTMLAttributes<HTMLElement>;
 
-ZapThreads.onLogin = function (cb?: () => Promise<boolean>) {
+ZapThreads.onLogin = function (cb?: (knownUser: boolean) => Promise<{ accepted: boolean, autoLogin: boolean }>) {
   store.onLogin = cb;
   return ZapThreads;
 };

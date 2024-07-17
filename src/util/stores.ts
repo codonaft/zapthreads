@@ -21,6 +21,7 @@ export const store = createMutable<PreferencesStore>({
   maxCommentLength: 0,
   validatedEvents: new Map,
   writePowDifficulty: 0,
+  minReadPow: 0,
   maxWritePow: 0,
   spam: {
     events: new Set,
@@ -36,7 +37,7 @@ export const signersStore = createMutable<SignersStore>({});
 // Signing
 
 export type SignersStore = {
-  [key in 'active' | 'anonymous' | 'internal' | 'external']?: EventSigner;
+  active?: EventSigner;
 };
 export type SignEvent = (event: UnsignedEvent) => Promise<{ sig: string; }>;
 export type EventSigner = {
@@ -83,6 +84,7 @@ export type PreferencesStore = {
   maxCommentLength: number,
   validatedEvents: Map<Eid, boolean>,
   writePowDifficulty: number;
+  minReadPow: number;
   maxWritePow: number;
   spam: {
     events: Set<Eid>;
@@ -97,7 +99,7 @@ export type PreferencesStore = {
 
   anchorAuthor?: string;
   profiles: () => Profile[];
-  onLogin?: () => Promise<boolean>;
+  onLogin?: (knownUser: boolean) => Promise<{ accepted: boolean, autoLogin: boolean }>;
   onPublish?: (id: Eid, kind: number, content: string) => Promise<boolean>;
   onReceive?: (id: Eid, kind: number, content: string) => Promise<boolean>;
 };

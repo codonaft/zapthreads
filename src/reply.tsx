@@ -1,5 +1,5 @@
-import { defaultPicture, generateTags, satsAbbrev, shortenEncodedId, updateProfiles } from "./util/ui.ts";
-import { signAndPublishEvent, sign, pool } from "./util/network.ts";
+import { defaultPicture, generateTags, satsAbbrev, shortenEncodedId, updateProfiles, errorText } from "./util/ui.ts";
+import { signAndPublishEvent, sign, pool, manualLogin, logout } from "./util/network.ts";
 import { Show, createEffect, createSignal } from "solid-js";
 import { UnsignedEvent, Event } from "nostr-tools/core";
 import { EventSigner, signersStore, store } from "./util/stores.ts";
@@ -29,24 +29,12 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
   // Sessions
 
   const login = async () => {
-    if (store.onLogin) {
-      await store.onLogin();
-      return;
+    try {
+      await manualLogin();
+      setErrorMessage('');
+    } catch (e) {
+      onError(errorText(e));
     }
-
-    if (!window.nostr) {
-      onError('Error: No NIP-07 extension!');
-      return;
-    }
-    const pk = await window.nostr!.getPublicKey();
-
-    signersStore.internal = {
-      pk,
-      signEvent: async (event) => window.nostr!.signEvent(event)
-    };
-
-    setErrorMessage(''); // clear error
-    signersStore.active = signersStore.internal;
   };
 
   // Logged in user is a computed property of the active signer
@@ -101,13 +89,13 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
       signer = signersStore.anonymous;*/
     }
 
-    if (store.onLogin && await store.onLogin() && signer?.pk !== signersStore.active?.pk) {
+    /*if (store.onLogin && await store.onLogin(true) && signer?.pk !== signersStore.active?.pk) {
       console.log('current user has changed');
       return;
-    }
+    }*/
 
     if (!signer?.signEvent) {
-      onError('Error: User has no signer!');
+      onError('User has no signer!');
       return;
     }
 
@@ -191,7 +179,7 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
     } else {
       const { ok, failures, event } = await signAndPublishEvent(unsignedEvent, signer);
       if (ok === 0) {
-        onError('Error: Your comment was not published to any relay');
+        onError('Your comment was not published to any relay');
       } else {
         const msg = `Published to ${ok}/${writeRelays().length} relays (see console for more info)`;
         const notice = failures > 0 ? msg : undefined;
@@ -238,10 +226,8 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
           Reply as {loggedInUser()!.n || shortenEncodedId(npubEncode(loggedInUser()!.pk))}
         </button>}
 
-      {/*!loggedInUser() && !store.disableFeatures!.includes('replyAnonymously') &&
-        <button disabled={loading()} class="ztr-reply-button" onClick={() => publish()}>
-          Reply anonymously
-        </button>*/}
+      {loggedInUser() &&
+        <button class="ztr-reply-button" onClick={() => logout()}>Logout</button>}
 
       {!loggedInUser() &&
         <button class="ztr-reply-login-button" onClick={() => login()}>

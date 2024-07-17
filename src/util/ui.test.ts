@@ -14,6 +14,7 @@ describe("ui utils", () => {
       maxCommentLength: 0,
       validatedEvents: new Map,
       writePowDifficulty: 0,
+      minReadPow: 0,
       maxWritePow: 0,
       spam: {
         events: new Set,
