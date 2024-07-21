@@ -7,7 +7,7 @@ import { matchAll, replaceAll } from "nostr-tools/nip27";
 import nmd from "nano-markdown";
 import { findAll, save } from "./db.ts";
 import { store } from "./stores.ts";
-import { NoteEvent, Profile, Eid } from "./models.ts";
+import { NoteEvent, Profile, Eid, ReactionEvent } from "./models.ts";
 import { pool, rankRelays } from "./network.ts";
 import { currentTime } from "./date-time.ts";
 
@@ -75,8 +75,8 @@ export const getRelayLatest = async (anchor: Anchor) => {
   const hour = 3600;
   const now = currentTime();
   return Object.fromEntries(relaysForAnchor.map(r => {
-    const updatedLongTimeAgo = r.l + hour > now; // make sure we don't miss events sent from machines with poor network or poor time sync
-    const since = Math.max(0, updatedLongTimeAgo ? r.l + 1 : r.l - hour);
+    const updatedLongTimeAgo = r.l + hour < now;
+    const since = Math.max(0, updatedLongTimeAgo ? r.l + 1 : r.l - hour); // make sure we don't miss events sent from machines with poor network or poor time sync
     return [r.n, since];
   }));
 };
@@ -86,7 +86,7 @@ export const getRelayLatest = async (anchor: Anchor) => {
 // This since only applies to filter queries
 // ({ "#e": store.rootEventIds }, { "#a": [anchor().value] })
 // and not to aggregate or root event queries
-export const saveRelayLatestForFilter = async (anchor: Anchor, events: NoteEvent[]) => {
+export const saveRelayLatestForFilter = async (anchor: Anchor, events: (NoteEvent | ReactionEvent)[]) => {
   if (anchor.type !== 'http' && !store.anchorAuthor) return;
 
   const obj: { [url: string]: number; } = {};

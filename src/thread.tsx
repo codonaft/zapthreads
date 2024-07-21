@@ -25,7 +25,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
   const userObservedComments = () => store.userObservedComments;
 
   return <div class="ztr-thread">
-    <Index each={[...sortByDate(props.topNestedEvents()), ...bottomNestedEvents()]}>
+    <Index each={[...sortByDate(props.topNestedEvents(), !props.firstLevelComments), ...bottomNestedEvents()]}>
       {
         (event) => {
           const isRootEvent = !event().parent;

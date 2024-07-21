@@ -17,6 +17,9 @@ import { currentTime, MIN_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, SIX_HOURS_IN_SECS 
 import { getRelayLatest, errorText } from "./ui.ts";
 import { waitNostr } from "nip07-awaiter";
 
+export const NOTE_KINDS = [1, 9802];
+export const CONTENT_KINDS = [...NOTE_KINDS, 7, 9735];
+
 const STATS_SIZE = 5;
 const LONG_TIMEOUT = 7000;
 const SHORT_TIMEOUT = Math.max(LONG_TIMEOUT * 0.8, LONG_TIMEOUT - 1000);
@@ -108,7 +111,12 @@ class PrioritizedPool {
       if (!fastOrSlowRelays.has(relayUrl)) continue;
 
       const since = relayToSince[relayUrl];
-      const newFilters: Filter[] = filters.map(f => { return { ...f, since }; });
+      const newFilters: Filter[] = filters.map(f => {
+        if (f.kinds && f.kinds.filter(k => CONTENT_KINDS.includes(k)).length === f.kinds.length) {
+          return { ...f, since };
+        }
+        return f;
+      });
 
       requests.push({
         url: relayUrl,

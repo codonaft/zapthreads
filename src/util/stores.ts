@@ -19,7 +19,6 @@ export const store = createMutable<PreferencesStore>({
 
   languages: [],
   maxCommentLength: 0,
-  validatedEvents: new Map,
   writePowDifficulty: 0,
   minReadPow: 0,
   maxWritePow: 0,
@@ -82,7 +81,6 @@ export type PreferencesStore = {
 
   languages: string[],
   maxCommentLength: number,
-  validatedEvents: Map<Eid, boolean>,
   writePowDifficulty: number;
   minReadPow: number;
   maxWritePow: number;

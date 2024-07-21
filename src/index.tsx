@@ -4,7 +4,7 @@ import { createVisibilityObserver } from "@solid-primitives/intersection-observe
 import style from './styles/index.css?raw';
 import { saveRelayLatestForFilter, updateProfiles, totalChildren, parseUrlPrefixes, parseContent, normalizeURL } from "./util/ui.ts";
 import { normalizeURL as nostrNormalizeURL } from "nostr-tools/utils";
-import { fetchRelayInformation, infoExpired, powIsOk, pool, loginIfKnownUser } from "./util/network.ts";
+import { fetchRelayInformation, infoExpired, powIsOk, pool, loginIfKnownUser, NOTE_KINDS, CONTENT_KINDS } from "./util/network.ts";
 import { nest } from "./util/nest.ts";
 import { store, isDisableType, signersStore } from "./util/stores.ts";
 import { HOUR_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, sortByDate, currentTime } from "./util/date-time.ts";
@@ -193,10 +193,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   }, { defer: true });
 
   const validEvent = async (id: string, pk: Pk, powOrTags: number | string[][], kind: number, content: string) => {
-    if (store.validatedEvents.has(id)) {
-      return store.validatedEvents.get(id)!;
-    }
-
     const spamEvent = store.spam.events.has(id);
     if (spamEvent) {
       useSpamBlock('eventsSpam', id);
@@ -213,7 +209,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       !spamPk &&
       powIsOk(id, powOrTags, minReadPow()) &&
       (!store.onReceive || (await store.onReceive(id, kind, content)));
-    store.validatedEvents.set(id, valid);
     return valid;
   };
 
@@ -226,6 +221,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     const _readRelays = readRelays();
     const _anchor = anchor();
     const _events = events();
+    const _reactions = reactions();
     const _profiles = store.profiles();
 
     if (Object.entries(_filter).length === 0 || _readRelays.length === 0) {
@@ -244,8 +240,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       sub = null;
     });
 
-    const noteKinds = [1, 9802];
-    const kinds = [...noteKinds, 7, 9735];
     // TODO restore with a specific `since` for aggregates
     // (leaving it like this will fail when re-enabling likes/zaps)
     // if (!store.disableFeatures().includes('likes')) {
@@ -258,8 +252,8 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     console.log(`[zapthreads] subscribing to ${_anchor.value} on`, [..._readRelays]);
 
     const queryNoteRootEvent = !store.anchorAuthor && anchor().type === 'note';
-    const rootEventFilter = queryNoteRootEvent ? [{ ids: [anchor().value], kinds: noteKinds, limit: 1 }] : [];
-    const request = (url: string) => [url, [...rootEventFilter, { ..._filter, kinds }]];
+    const rootEventFilter = queryNoteRootEvent ? [{ ids: [anchor().value], kinds: NOTE_KINDS, limit: 1 }] : [];
+    const request = (url: string) => [url, [...rootEventFilter, { ..._filter, kinds: CONTENT_KINDS }]];
 
     const newLikeIds = new Set<string>();
     const newZaps: { [id: string]: string; } = {};
@@ -270,7 +264,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         onevent(e) {
           (async () => {
             const valid = await validEvent(e.id, e.pubkey, e.tags, e.kind, e.content);
-            if (noteKinds.includes(e.kind)) {
+            if (NOTE_KINDS.includes(e.kind)) {
               const isNoteRootEvent = queryNoteRootEvent && !store.anchorAuthor && e.id === anchor().value;
               if (isNoteRootEvent || (valid && e.content.trim())) {
                 if (isNoteRootEvent) {
@@ -321,11 +315,11 @@ const ZapThreads = (props: { [key: string]: string; }) => {
           })();
 
           onSaved(async () => {
+            // Save latest received events for each relay
+            saveRelayLatestForFilter(_anchor, [..._events, ..._reactions]);
+
             // Update profiles of current events (includes anchor author)
             await updateProfiles(new Set([..._events.map(e => e.pk)]), _readRelays, _profiles);
-
-            // Save latest received events for each relay
-            saveRelayLatestForFilter(_anchor, _events);
 
             await updateSpamFilters(lastUpdateSpamFilters);
             await pool.estimateWriteRelayLatencies();
@@ -377,12 +371,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   const nestedEvents = createMemo(() => {
     if (store.rootEventIds && store.rootEventIds.length) {
       const _events = events();
-      (async () => { for (const e of _events) {
-        if (!(await validEvent(e.id, e.pk, e.pow, e.k, e.c)) && (anchor().type !== 'note' || store.anchorAuthor !== e.pk)) {
-          // TODO: if pow has changed - reset "since"?
-          remove('events', [e.id]);
-        }
-      } })();
       return nest(_events).filter(e => {
         // remove all highlights without children (we only want those that have comments on them)
         return !(e.k === 9802 && e.children.length === 0);
@@ -413,7 +401,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   const firstLevelComments = () => nestedEvents().filter(n => !n.parent).length;
 
   const reactions = watchAll(() => ['reactions', anchor().value, { index: 'a' }]);
-  const votes = createMemo(() => reactions().filter(r => voteKind(r) !== 0 && (!store.validatedEvents.has(r.id) || store.validatedEvents.get(r.id))));
+  const votes = createMemo(() => reactions().filter(r => voteKind(r) !== 0));
 
   let rootElement: HTMLDivElement | undefined;
   const visible = createVisibilityObserver({ threshold: 0.0 })(() => rootElement);

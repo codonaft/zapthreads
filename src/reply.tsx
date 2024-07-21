@@ -226,8 +226,8 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
           Reply as {loggedInUser()!.n || shortenEncodedId(npubEncode(loggedInUser()!.pk))}
         </button>}
 
-      {loggedInUser() &&
-        <button class="ztr-reply-button" onClick={() => logout()}>Logout</button>}
+      {/*loggedInUser() &&
+        <button class="ztr-reply-button" onClick={() => logout()}>Logout</button>*/}
 
       {!loggedInUser() &&
         <button class="ztr-reply-login-button" onClick={() => login()}>

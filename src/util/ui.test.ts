@@ -12,7 +12,6 @@ describe("ui utils", () => {
       filter: {},
       languages: [],
       maxCommentLength: 0,
-      validatedEvents: new Map,
       writePowDifficulty: 0,
       minReadPow: 0,
       maxWritePow: 0,

@@ -8,10 +8,12 @@ export const WEEK_IN_SECS = 7 * DAY_IN_SECS;
 
 export const currentTime = () => Math.round(Date.now() / 1000);
 
-export const sortByDate = <T extends { id: Eid; ts?: number; }>(arr: T[]) => arr.sort((a, b) => {
+export const sortByDate = <T extends { id: Eid; ts?: number; }>(arr: T[], ascending: boolean = false) => arr.sort((a, b) => {
   const aTs = a.ts || 0;
   const bTs = b.ts || 0;
-  return aTs !== bTs ? bTs - aTs : a.id.localeCompare(b.id);
+  const deltaTs = aTs - bTs;
+  const result = deltaTs !== 0 ? deltaTs : a.id.localeCompare(b.id);
+  return ascending ? result : -result;
 });
 
 export const timeAgo = (timestamp: number): string => {
