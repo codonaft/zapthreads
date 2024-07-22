@@ -11,10 +11,11 @@ import { getPow, minePow } from "nostr-tools/nip13";
 import { npubEncode } from "nostr-tools/nip19";
 import { find, findAll, save, onSaved, remove } from "./db.ts";
 import { EventSigner, store, signersStore } from "./stores.ts";
-import { Eid, RelayInfo, RelayStats, Pk } from "./models.ts";
+import { Eid, RelayInfo, RelayStats, Pk, eventToNoteEvent, NoteEvent } from "./models.ts";
 import { medianOrZero, maxBy } from "./collections.ts";
 import { currentTime, MIN_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, SIX_HOURS_IN_SECS } from "./date-time.ts";
-import { getRelayLatest, errorText } from "./ui.ts";
+import { getRelayLatest, errorText, parseContent } from "./ui.ts";
+import { updateBlockFilters, loadBlockFilters, applyBlock } from "./block-lists.ts";
 import { waitNostr } from "nip07-awaiter";
 
 export const NOTE_KINDS = [1, 9802];
@@ -276,10 +277,6 @@ class PrioritizedPool {
   }
 
   async publishEvent(event: Event): Promise<{ ok: number, failures: number }> {
-    if (store.onPublish && !(await store.onPublish(event.id, event.kind, event.content))) {
-      return { ok: 0, failures: 0 };
-    }
-
     const writeRelays = store.writeRelays;
     const { fastRelays, slowRelays, offlineRelays, unsupported } = await rankRelays(writeRelays, { event, write: true });
 
@@ -302,7 +299,7 @@ class PrioritizedPool {
     const deltaTime = Date.now() - startTime;
 
     const { ok, failures } = countResults(results, relays);
-    console.log(`[zapthreads] event ${event.id} published in ${deltaTime} ms to ${ok} relays (${failures} failing)`, relays);
+    console.log(`[zapthreads] event ${event.id} published in ${deltaTime} ms to ${ok} relays (${failures} failed)`, relays);
     return { ok, failures };
   }
 
@@ -624,7 +621,7 @@ export const loginIfKnownUser = async () => {
     return;
   }
 
-  if (store.onLogin && !(await store.onLogin(true))) return;
+  if (store.onLogin && !(await store.onLogin({ knownUser: true }))) return;
 
   signersStore.active = {
     pk: pubkey,
@@ -644,7 +641,7 @@ export const manualLogin = async () => {
     pk = await window.nostr!.getPublicKey();
     const session = sessions.find(s => s.pk === pk);
     if (session) {
-      if (store.onLogin && await store.onLogin(true)) {
+      if (store.onLogin && await store.onLogin({ knownUser: true })) {
         console.log('[zapthreads] re-enabling auto-login');
         signersStore.active = {
           pk,
@@ -660,7 +657,7 @@ export const manualLogin = async () => {
   }
 
   const { accepted, autoLogin } = store.onLogin
-    ? await store.onLogin(false)
+    ? await store.onLogin({ knownUser: false })
     : { accepted: true, autoLogin: false };
   if (!accepted) return;
 
@@ -696,3 +693,42 @@ export const logout = async () => {
   }
   signersStore.active = undefined;
 };
+
+export const validateEvent = (e: UnsignedEvent & { id: undefined } | Event, minReadPow?: number) => {
+  if (NOTE_KINDS.includes(e.kind)) {
+    return validateNoteEvent(eventToNoteEvent(e), minReadPow);
+  };
+
+  preValidate({ id: e.id, pubkey: e.pubkey, kind: e.kind, powOrTags: e.tags, content: e.content }, minReadPow);
+  const result = store.onEvent
+    ? store.onEvent({ kind: e.kind, content: e.content }) // FIXME: parseContent? nope, it's not note
+    : { sanitizedContent: e.content, rank: undefined };
+  return { ...result, noteEvent: undefined };
+};
+
+export const validateNoteEvent = (e: NoteEvent, minReadPow?: number) => {
+  preValidate({ id: e.id, pubkey: e.pk, kind: e.k, powOrTags: e.pow, content: e.c }, minReadPow);
+  const result = store.onEvent
+    ? store.onEvent({ kind: e.k, content: parseContent(e, store) })
+    : { sanitizedContent: e.c, rank: undefined }
+  return { ...result, noteEvent: e };
+};
+
+const preValidate = (e: { id: Eid | undefined; pubkey: Pk; kind: number; powOrTags: number | string[][]; content: string }, minReadPow?: number) => {
+  const blockedEvent = e.id && store.blocks.events.has(e.id);
+  if (blockedEvent) {
+    applyBlock('eventsBlocked', e.id!);
+  }
+
+  const blockedPk = store.blocks.pubkeys.has(e.pubkey);
+  if (blockedPk) {
+    applyBlock('pubkeysBlocked', e.pubkey);
+  }
+
+  if (blockedEvent) throw new Error('Block-listed event');
+  if (blockedPk) throw new Error('Block-listed user');
+
+  if (!e.content.trim() && e.content.length > store.maxCommentLength) throw new Error('Invalid message length');
+
+  if (e.id !== undefined && minReadPow !== undefined && !powIsOk(e.id, e.powOrTags, minReadPow)) throw new Error('NIP-13 PoW is not okay');
+}

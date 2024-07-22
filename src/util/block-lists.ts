@@ -1,28 +1,30 @@
-import { Spam } from "./models.ts";
+import { Block, BlockName, Eid, Pk } from "./models.ts";
 import { store } from "./stores.ts";
 import { find, findAll, save, remove } from "./db.ts";
 import { HOUR_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, currentTime } from "./date-time.ts";
 import { shortFetch } from "./network.ts";
 
-const disabled = () => store.disableFeatures!.includes('spamNostrBand');
+const disabledSpamNostrBand = () => store.disableFeatures!.includes('spamNostrBand');
 
-export const updateSpamFilters = async (lastUpdateSpamFilters: number) => {
-  if (disabled()) return;
+export const updateBlockFilters = async (lastUpdateBlockFilters: number) => {
+  if (disabledSpamNostrBand() || !store.blocks.checkUpdates) return;
+
+  store.blocks.checkUpdates = false;
   const now = currentTime();
-  const deadline = lastUpdateSpamFilters + DAY_IN_SECS;
+  const deadline = lastUpdateBlockFilters + DAY_IN_SECS;
   if (now < deadline) {
     console.log(`[zapthreads] spam filters will be updated in ${((deadline - now) / HOUR_IN_SECS).toFixed(1)} hours`);
     return;
   }
 
-  await Promise.allSettled(['events', 'pubkeys'].map(async (view) => {
+  const lists: BlockName[] = ['eventsBlocked', 'pubkeysBlocked'];
+  await Promise.allSettled(lists.map(async (list) => {
     const API_METHOD = 'https://spam.nostr.band/spam_api?method=get_current_spam';
     try {
+      const view = list.replace('Blocked', '');
       const request = shortFetch(`${API_METHOD}&view=${view}`);
-      const type = `${view}Spam`;
-
       // @ts-ignore
-      const fromStore = store.spam[view];
+      const fromStore = store.blocks[view];
 
       const response = await request;
       if (response.status === 200) {
@@ -30,14 +32,11 @@ export const updateSpamFilters = async (lastUpdateSpamFilters: number) => {
           .map((i: any) => i[view])
           .flat()
           .filter((id: string) =>
-            // @ts-ignore
             !fromStore.has(id)
           );
         newIds.forEach((id: string) => {
-          // @ts-ignore
           fromStore.add(id);
-          // @ts-ignore
-          save(type, { id, addedAt: now, used: false });
+          save(list, { id, addedAt: now, used: false, reason: `Block-listed ${view.slice(0, -1)} by spam.nostr.band` });
         });
       }
     } catch (e) {
@@ -47,38 +46,39 @@ export const updateSpamFilters = async (lastUpdateSpamFilters: number) => {
   console.log('[zapthreads] updated spam filters');
 };
 
-export const loadSpamFilters = async () => {
-  if (disabled()) return 0;
+export const loadBlockFilters = async () => {
+  if (disabledSpamNostrBand()) return 0;
+
   const now = currentTime();
-  return Math.max(...await Promise.all(['events', 'pubkeys'].map(
-    async (view: string) => {
+  const lists: BlockName[] = ['eventsBlocked', 'pubkeysBlocked'];
+  const lastUpdate = Math.max(...await Promise.all(lists.map(
+    async (list) => {
+      const view = list.replace('Blocked', '');
       // @ts-ignore
-      const fromStore = store.spam[view];
-      const type = `${view}Spam`;
+      const fromStore = store.blocks[view];
       let lastUpdate = 0;
       const outdatedIds = [];
-      // @ts-ignore
-      const items: Spam[] = await findAll(type);
+      const items: Block[] = await findAll(list);
       for (const i of items) {
         lastUpdate = Math.max(lastUpdate, i.addedAt);
         if (!i.used && now >= i.addedAt + WEEK_IN_SECS) {
           outdatedIds.push(i.id);
         } else {
-          // @ts-ignore
           fromStore.add(i.id);
         }
       }
       // @ts-ignore
-      remove(type, outdatedIds);
+      remove(list, outdatedIds);
       return lastUpdate;
     }
   )));
+  return lastUpdate;
 };
 
-export const useSpamBlock = async (type: 'eventsSpam' | 'pubkeysSpam', id: string) => {
-  if (disabled()) return;
-  const spam = await find(type, IDBKeyRange.only(id));
-  if (spam && !spam.used) {
-    save(type, { ...spam, used: true });
+export const applyBlock = async (list: BlockName, id: Eid | Pk, reason?: string) => {
+  const block = await find(list, IDBKeyRange.only(id)) || { id, addedAt: currentTime(), used: false };
+  if (!block.used) {
+    const newReason = block.reason || reason;
+    save(list, { ...block, used: true, reason: newReason });
   }
 };

@@ -91,10 +91,12 @@ export type RelayStats = {
   ts: number;
 };
 
-export type Spam = {
+export type BlockName = 'eventsBlocked' | 'pubkeysBlocked';
+export type Block = {
   id: string;
   addedAt: number;
   used: boolean;
+  reason?: string;
 };
 
 // DB schema
@@ -154,13 +156,13 @@ export interface ZapthreadsSchema extends DBSchema {
       'by-name': string;
     };
   };
-  eventsSpam: {
+  eventsBlocked: {
     key: string;
-    value: Spam;
+    value: Block;
   };
-  pubkeysSpam: {
+  pubkeysBlocked: {
     key: string;
-    value: Spam;
+    value: Block;
   };
 }
 
@@ -173,8 +175,8 @@ export const indices: { [key in StoreNames<ZapthreadsSchema>]: any } = {
   'relays': ['n', 'a'],
   'relayInfos': 'name',
   'relayStats': ['name', 'kind', 'serial'],
-  'eventsSpam': 'id',
-  'pubkeysSpam': 'id',
+  'eventsBlocked': 'id',
+  'pubkeysBlocked': 'id',
 };
 
 export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion: number) => {
@@ -209,9 +211,9 @@ export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion
   const relayStats = db.createObjectStore('relayStats', { keyPath: indices['relayStats'] });
   relayStats.createIndex('by-name', 'name');
 
-  const pubkeysSpam = db.createObjectStore('pubkeysSpam', { keyPath: indices['pubkeysSpam'] });
+  const pubkeysBlocked = db.createObjectStore('pubkeysBlocked', { keyPath: indices['pubkeysBlocked'] });
 
-  const eventsSpam = db.createObjectStore('eventsSpam', { keyPath: indices['eventsSpam'] });
+  const eventsBlocked = db.createObjectStore('eventsBlocked', { keyPath: indices['eventsBlocked'] });
 };
 
 // util

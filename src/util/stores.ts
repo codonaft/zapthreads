@@ -22,10 +22,12 @@ export const store = createMutable<PreferencesStore>({
   writePowDifficulty: 0,
   minReadPow: 0,
   maxWritePow: 0,
-  spam: {
+  blocks: {
     events: new Set,
     pubkeys: new Set,
+    checkUpdates: true,
   },
+  ranks: new Map,
 
   filter: {},
   profiles: () => [],
@@ -84,10 +86,12 @@ export type PreferencesStore = {
   writePowDifficulty: number;
   minReadPow: number;
   maxWritePow: number;
-  spam: {
+  blocks: {
     events: Set<Eid>;
     pubkeys: Set<Pk>;
+    checkUpdates: boolean,
   };
+  ranks: Map<Eid, number>;
 
   filter: Filter;  // derived from anchor prop
   externalAuthor?: string; // prop, mostly used with http anchor type
@@ -97,9 +101,8 @@ export type PreferencesStore = {
 
   anchorAuthor?: string;
   profiles: () => Profile[];
-  onLogin?: (knownUser: boolean) => Promise<{ accepted: boolean, autoLogin: boolean }>;
-  onPublish?: (id: Eid, kind: number, content: string) => Promise<boolean>;
-  onReceive?: (id: Eid, kind: number, content: string) => Promise<boolean>;
+  onLogin?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin: boolean }>;
+  onEvent?: (event: { kind: number; content: string; }) => { sanitizedContent?: string; rank?: number; };
 };
 
 export type Anchor = { type: 'http' | 'naddr' | 'note' | 'error', value: string; };

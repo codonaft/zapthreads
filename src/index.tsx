@@ -2,9 +2,9 @@ import { JSX, createComputed, createEffect, createMemo, createSignal, on, onMoun
 import { customElement } from 'solid-element';
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer";
 import style from './styles/index.css?raw';
-import { saveRelayLatestForFilter, updateProfiles, totalChildren, parseUrlPrefixes, parseContent, normalizeURL } from "./util/ui.ts";
+import { saveRelayLatestForFilter, updateProfiles, totalChildren, parseUrlPrefixes, parseContent, normalizeURL, errorText } from "./util/ui.ts";
 import { normalizeURL as nostrNormalizeURL } from "nostr-tools/utils";
-import { fetchRelayInformation, infoExpired, powIsOk, pool, loginIfKnownUser, NOTE_KINDS, CONTENT_KINDS } from "./util/network.ts";
+import { fetchRelayInformation, infoExpired, powIsOk, pool, loginIfKnownUser, NOTE_KINDS, CONTENT_KINDS, validateEvent } from "./util/network.ts";
 import { nest } from "./util/nest.ts";
 import { store, isDisableType, signersStore } from "./util/stores.ts";
 import { HOUR_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, sortByDate, currentTime } from "./util/date-time.ts";
@@ -18,8 +18,8 @@ import { Event } from "nostr-tools/core";
 import { finalizeEvent, getPublicKey, UnsignedEvent  } from "nostr-tools/pure";
 import { Filter } from "nostr-tools/filter";
 import { SubCloser } from "nostr-tools/pool";
-import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, RelayInfo, Eid, Pk, Spam } from "./util/models.ts";
-import { updateSpamFilters, loadSpamFilters, useSpamBlock } from "./util/spam.ts";
+import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, RelayInfo, Eid, Pk, Block } from "./util/models.ts";
+import { updateBlockFilters, loadBlockFilters } from "./util/block-lists.ts";
 
 const ZapThreads = (props: { [key: string]: string; }) => {
   const minReadPow = () => +props.minReadPow;
@@ -192,26 +192,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     return store.filter;
   }, { defer: true });
 
-  const validEvent = async (id: string, pk: Pk, powOrTags: number | string[][], kind: number, content: string) => {
-    const spamEvent = store.spam.events.has(id);
-    if (spamEvent) {
-      useSpamBlock('eventsSpam', id);
-    }
-
-    const spamPk = store.spam.pubkeys.has(pk);
-    if (spamPk) {
-      useSpamBlock('pubkeysSpam', pk);
-    }
-
-    const valid =
-      (content.trim() && content.length <= store.maxCommentLength) &&
-      !spamEvent &&
-      !spamPk &&
-      powIsOk(id, powOrTags, minReadPow()) &&
-      (!store.onReceive || (await store.onReceive(id, kind, content)));
-    return valid;
-  };
-
   let sub: SubCloser | null;
 
   // Filter -> remote events, content
@@ -228,7 +208,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       return;
     }
 
-    const lastUpdateSpamFilters = await loadSpamFilters();
+    const lastUpdateBlockFilters = await loadBlockFilters();
 
     // Ensure clean subs
     sub?.close();
@@ -252,7 +232,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     console.log(`[zapthreads] subscribing to ${_anchor.value} on`, [..._readRelays]);
 
     const queryNoteRootEvent = !store.anchorAuthor && anchor().type === 'note';
-    const rootEventFilter = queryNoteRootEvent ? [{ ids: [anchor().value], kinds: NOTE_KINDS, limit: 1 }] : [];
+    const rootEventFilter = queryNoteRootEvent ? [{ ids: [anchor().value], kinds: NOTE_KINDS, limit: 1 }] : []; // TODO: minReadPow
     const request = (url: string) => [url, [...rootEventFilter, { ..._filter, kinds: CONTENT_KINDS }]];
 
     const newLikeIds = new Set<string>();
@@ -265,15 +245,23 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       {
         onevent(e) {
           (async () => {
-            const valid = await validEvent(e.id, e.pubkey, e.tags, e.kind, e.content);
-            if (NOTE_KINDS.includes(e.kind)) {
+            let noteEvent;
+            let valid = true;
+            try {
+              noteEvent = validateEvent(e, minReadPow()).noteEvent;
+            } catch (err) {
+              console.info(`[zapthreads] ${e.id} ${errorText(err)}`);
+              valid = false;
+            }
+
+            if (noteEvent) {
               const isNoteRootEvent = queryNoteRootEvent && !store.anchorAuthor && e.id === anchor().value;
               if (isNoteRootEvent || valid) {
                 if (isNoteRootEvent) {
                   console.log(`[zapthreads] anchor author is ${e.pubkey}`);
                   store.anchorAuthor = e.pubkey;
                 }
-                save('events', eventToNoteEvent(e));
+                save('events', noteEvent);
                 newPks.add(e.pubkey);
               } else {
                 remove('events', [e.id]);
@@ -327,7 +315,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
             saveRelayLatestForFilter(_anchor, [..._events, ..._reactions]);
 
             await pool.estimateWriteRelayLatencies();
-            await updateSpamFilters(lastUpdateSpamFilters);
+            await updateBlockFilters(lastUpdateBlockFilters);
             await pool.updateRelayInfos();
 
             if (closeOnEose()) {
@@ -352,7 +340,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
       if (contentEvent) {
         const c = `# ${contentEvent.tl}\n ${contentEvent.c}`;
-        return parseContent({ ...contentEvent, c }, store, []);
+        return parseContent({ ...contentEvent, c }, store);
       }
     }
   });
@@ -485,17 +473,12 @@ export type ZapThreadsAttributes = {
   [key in 'anchor' | 'version' | 'relays' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'languages' | 'max-comment-length' | 'min-read-pow' | 'max-write-pow']?: string;
 } & JSX.HTMLAttributes<HTMLElement>;
 
-ZapThreads.onLogin = function (cb?: (knownUser: boolean) => Promise<{ accepted: boolean, autoLogin: boolean }>) {
+ZapThreads.onLogin = function (cb?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin: boolean; }>) {
   store.onLogin = cb;
   return ZapThreads;
 };
 
-ZapThreads.onPublish = function (cb?: (id: Eid, kind: number, content: string) => Promise<boolean>) {
-  store.onPublish = cb;
-  return ZapThreads;
-};
-
-ZapThreads.onReceive = function (cb?: (id: Eid, kind: number, content: string) => Promise<boolean>) {
-  store.onReceive = cb;
+ZapThreads.onEvent = function (cb?: (event: { kind: number; content: string; }) => { sanitizedContent: string; rank?: number; }) {
+  store.onEvent = cb;
   return ZapThreads;
 };

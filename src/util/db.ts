@@ -19,7 +19,7 @@ const db = async () => {
   if (!_retryOpenDatabase || !_enabledDatabase) return;
   try {
     if (!__db) {
-      __db = await openDB<ZapthreadsSchema>('zapthreads', 2, { upgrade });
+      __db = await openDB<ZapthreadsSchema>('zapthreads-codonaft', 2, { upgrade });
 
       __db.addEventListener('close', (event) => {
         console.log('closed database');

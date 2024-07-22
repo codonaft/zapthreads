@@ -1,7 +1,7 @@
 import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on } from "solid-js";
 import { defaultPicture, parseContent, shortenEncodedId, svgWidth, totalChildren, errorText } from "./util/ui.ts";
 import { DAY_IN_SECS, WEEK_IN_SECS, currentTime, sortByDate, timeAgo } from "./util/date-time.ts";
-import { signAndPublishEvent, manualLogin } from "./util/network.ts";
+import { signAndPublishEvent, manualLogin, validateNoteEvent } from "./util/network.ts";
 import { ReplyEditor } from "./reply.tsx";
 import { NestedNoteEvent } from "./util/nest.ts";
 import { noteEncode, npubEncode } from "nostr-tools/nip19";
@@ -12,20 +12,54 @@ import { NoteEvent, Profile, Pk, ReactionEvent, VoteKind, Eid, voteKind } from "
 import { remove } from "./util/db.ts";
 import { newSignal, trigger } from "./util/solidjs.ts";
 import { getOrSetOrUpdate } from "./util/collections.ts";
+import { applyBlock } from "./util/block-lists.ts";
 
 export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottomNestedEvents?: () => NestedNoteEvent[]; articles: () => NoteEvent[]; votes: () => ReactionEvent[]; firstLevelComments?: () => number; }) => {
+  const articles = () => props.articles();
   const anchor = () => store.anchor!;
   const profiles = store.profiles!;
 
   const MIN_AUTO_COLLAPSED_THREADS = 3;
   const MIN_AUTO_COLLAPSED_COMMENTS = 5;
 
+  const topNestedEvents = () => props.topNestedEvents();
   const bottomNestedEvents = () => props.bottomNestedEvents ? props.bottomNestedEvents() : [];
   const firstLevelComments = () => props.firstLevelComments && props.firstLevelComments() || 0;
   const userObservedComments = () => store.userObservedComments;
 
+  const validateAndRank = (events: NestedNoteEvent[]) => {
+    const rankedEvents = [];
+    const invalidEvents: Eid[] = [];
+    for (const e of events) {
+      let rank = store.ranks.get(e.id)
+      if (rank === undefined) {
+        try {
+          // computing most recent rank and validation result
+          rank = validateNoteEvent(e).rank || 0;
+          store.ranks.set(e.id, rank);
+        } catch (err) {
+          applyBlock('eventsBlocked', e.id, errorText(err));
+          invalidEvents.push(e.id);
+        }
+      }
+      if (rank !== undefined) {
+        rankedEvents.push({ rank, e });
+      }
+    }
+    remove('events', invalidEvents);
+    return rankedEvents;
+  };
+
+  const events = () => {
+    const topEvents = validateAndRank(sortByDate(topNestedEvents(), !props.firstLevelComments))
+      .sort((a, b) => a.rank - b.rank)
+      .map(({ e }) => e);
+    const bottomEvents = validateAndRank(bottomNestedEvents()).map(({ e }) => e);
+    return [...topEvents, ...bottomEvents];
+  };
+
   return <div class="ztr-thread">
-    <Index each={[...sortByDate(props.topNestedEvents(), !props.firstLevelComments), ...bottomNestedEvents()]}>
+    <Index each={events()}>
       {
         (event) => {
           const isRootEvent = !event().parent;
@@ -45,7 +79,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
                   trigger: () => setThreadCollapsed(!threadCollapsed()),
                 },
                 text: {
-                  value: parseContent(event(), store, props.articles()),
+                  value: parseContent(event(), store, articles()),
                   collapsed: newSignal(true),
                 },
                 reply: {
@@ -57,6 +91,14 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               return commentContext;
             }
           };
+
+          createEffect(on([articles], () => {
+            if (store.commentContexts.has(event().id)) {
+              const updated = { ...context() };
+              updated.text.value = parseContent(event(), store, articles());
+              store.commentContexts.set(event().id, updated);
+            }
+          }));
 
           const MAX_LENGTH = 255;
           const overflowed = () => context().text.value.length > MAX_LENGTH;

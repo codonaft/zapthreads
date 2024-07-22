@@ -115,17 +115,18 @@ document.querySelector('zap-threads').shadowRoot.appendChild(style);
 ### Callbacks
 ```js
 ZapThreads
-  .onLogin(async (knownUser) => {
+  .onLogin(async ({ knownUser }) => {
     if (!knownUser) {
-      // custom consent dialog that normal user probably doesn't read anyway
+      // show custom consent dialog that normal user probably doesn't read anyway
     }
     return { accepted: true, autoLogin: true };
   })
-  .onPublish(async (id, kind, content) => {
-    return (kind === 1 || kind === 7) && content.length < 1000;
-  })
-  .onReceive(async (id, kind, content) => {
-    return (kind === 1 || kind === 7) && content.length < 1000;
+  .onEvent(({ kind, content }) => {
+    if (kind === 1 && content.includes('poker')) {
+      throw new Error("No spamming please, we're discussing important things here");
+    }
+    const rank = content.length > 1000 ? -1 : 0;
+    return { sanitizedContent: content.replaceAll('perkele', 'mind-blowing'), rank };
   })
 ```
 

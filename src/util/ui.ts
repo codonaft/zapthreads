@@ -4,7 +4,7 @@ import { decode } from "nostr-tools/nip19";
 import { Filter } from "nostr-tools/filter";
 import { Event } from "nostr-tools/core";
 import { matchAll, replaceAll } from "nostr-tools/nip27";
-import nmd from "nano-markdown";
+import { Remarkable } from 'remarkable';
 import { findAll, save } from "./db.ts";
 import { store } from "./stores.ts";
 import { NoteEvent, Profile, Pk, Eid, ReactionEvent } from "./models.ts";
@@ -143,10 +143,8 @@ export const encodedEntityToFilter = (entity: string): Filter => {
 };
 
 const URL_REGEX = /(?<=^|\s)https?:\/\/[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&\/\/=]*)/gi;
-const IMAGE_REGEX = /(\S*(?:png|jpg|jpeg|gif|webp))/gi;
+const IMAGE_REGEX = /(\S*(?:png|jpg|jpeg|gif|webp|svg))/gi;
 const BAD_NIP27_REGEX = /(?<=^|\s)@?((naddr|npub|nevent|note)[a-z0-9]{20,})/g;
-const BACKTICKS_REGEX = /\`(.*?)\`/g;
-
 const ANY_HASHTAG = /\B\#([a-zA-Z0-9]+\b)(?!;)/g;
 
 export const parseContent = (e: NoteEvent, store: PreferencesStore, articles: NoteEvent[] = []): string => {
@@ -198,11 +196,13 @@ export const parseContent = (e: NoteEvent, store: PreferencesStore, articles: No
     }
   });
 
-  // Replace backticks with code
-  content = content.replaceAll(BACKTICKS_REGEX, '<code>$1</code>');
+  const md = new Remarkable('full', {
+    linkTarget: '_blank',
+    // TODO: typographer: true
+  });
 
   // Markdown => HTML
-  return nmd(content.trim());
+  return md.render(content.trim());
 };
 
 export const generateTags = (content: string): string[][] => {
@@ -290,6 +290,6 @@ export const normalizeURL = (url: string, removeSlashes: boolean = true): string
 };
 
 export const errorText = <T>(exception: T) => {
-  const err = (exception as any)?.reason;
-  return err?.message || String(err);
+  const err = (exception as any);
+  return err?.message || String(err?.reason);
 };

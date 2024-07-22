@@ -1,5 +1,5 @@
 import { defaultPicture, generateTags, satsAbbrev, shortenEncodedId, updateProfiles, errorText } from "./util/ui.ts";
-import { signAndPublishEvent, sign, pool, manualLogin, logout } from "./util/network.ts";
+import { signAndPublishEvent, sign, pool, manualLogin, logout, validateEvent } from "./util/network.ts";
 import { Show, createEffect, createSignal } from "solid-js";
 import { UnsignedEvent, Event } from "nostr-tools/core";
 import { EventSigner, signersStore, store } from "./util/stores.ts";
@@ -70,7 +70,7 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
   const onError = (message: string) => {
     setLoading(false);
     // set error message
-    setErrorMessage(`Error: ${message}`);
+    setErrorMessage(message);
   };
 
   const publish = async (profile?: Profile) => {
@@ -79,20 +79,7 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
       signer = signersStore.active;
     } else {
       return;
-      /*if (!signersStore.anonymous) {
-        const sk = generateSecretKey();
-        signersStore.anonymous = {
-          pk: getPublicKey(sk),
-          signEvent: async (event) => ({ sig: finalizeEvent(event, sk).sig }),
-        };
-      }
-      signer = signersStore.anonymous;*/
     }
-
-    /*if (store.onLogin && await store.onLogin(true) && signer?.pk !== signersStore.active?.pk) {
-      console.log('current user has changed');
-      return;
-    }*/
 
     if (!signer?.signEvent) {
       onError('User has no signer!');
@@ -109,6 +96,13 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
       pubkey: signer.pk,
       tags: generateTags(content),
     };
+
+    try {
+      validateEvent({ ...unsignedEvent, id: undefined });
+    } catch (e) {
+      onError(errorText(e));
+      return;
+    }
 
     if (store.anchorAuthor && store.anchorAuthor !== unsignedEvent.pubkey) {
       // Add p tag from note author to notify them
@@ -209,7 +203,7 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
       {comment().length > 0.98 * maxCommentLength() && <span classList={{'ztr-reply-error': tooLong()}}>{warningSvg()} Comment is limited to {maxCommentLength()} characters; you entered {comment().length}.</span>}
     <div class="ztr-reply-controls">
       {store.disableFeatures!.includes('publish') && <span>Publishing is disabled</span>}
-      {errorMessage() && <span class="ztr-reply-error">Error: {errorMessage()}</span>}
+      {errorMessage() && <span class="ztr-reply-error">{errorMessage()}</span>}
 
       <Show when={!loading()} fallback={
         <svg class="ztr-spinner" viewBox="0 0 50 50">

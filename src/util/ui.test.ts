@@ -15,10 +15,12 @@ describe("ui utils", () => {
       writePowDifficulty: 0,
       minReadPow: 0,
       maxWritePow: 0,
-      spam: {
+      blocks: {
         events: new Set,
         pubkeys: new Set,
+        checkUpdates: true,
       },
+      ranks: new Map,
       profiles: () => [],
       rootEventIds: [],
       topRootEventIds: new Set,
