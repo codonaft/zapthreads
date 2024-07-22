@@ -257,6 +257,8 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
     const newLikeIds = new Set<string>();
     const newZaps: { [id: string]: string; } = {};
+    let newPks = new Set<Pk>();
+    const requestedProfileUpdate = new Set<Pk>();
 
     sub = await pool.subscribeManyMap(
       Object.fromEntries(_readRelays.map(request)),
@@ -272,6 +274,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
                   store.anchorAuthor = e.pubkey;
                 }
                 save('events', eventToNoteEvent(e));
+                newPks.add(e.pubkey);
               } else {
                 remove('events', [e.id]);
               }
@@ -292,6 +295,13 @@ const ZapThreads = (props: { [key: string]: string; }) => {
               invoiceTag && invoiceTag[1] && (newZaps[e.id] = invoiceTag[1]);
             }
           })()
+        },
+        oneoseOnRelay(relay) {
+          console.log('oneoseOnRelay', relay);
+          newPks = new Set([...newPks].filter(pk => !requestedProfileUpdate.has(pk)));
+          newPks.forEach(pk => requestedProfileUpdate.add(pk));
+          updateProfiles(newPks, _readRelays, _profiles);
+          newPks.clear();
         },
         oneose() {
           (async () => {
@@ -318,11 +328,8 @@ const ZapThreads = (props: { [key: string]: string; }) => {
             // Save latest received events for each relay
             saveRelayLatestForFilter(_anchor, [..._events, ..._reactions]);
 
-            // Update profiles of current events (includes anchor author)
-            await updateProfiles(new Set([..._events.map(e => e.pk)]), _readRelays, _profiles);
-
-            await updateSpamFilters(lastUpdateSpamFilters);
             await pool.estimateWriteRelayLatencies();
+            await updateSpamFilters(lastUpdateSpamFilters);
             await pool.updateRelayInfos();
 
             if (closeOnEose()) {

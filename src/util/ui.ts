@@ -7,20 +7,21 @@ import { matchAll, replaceAll } from "nostr-tools/nip27";
 import nmd from "nano-markdown";
 import { findAll, save } from "./db.ts";
 import { store } from "./stores.ts";
-import { NoteEvent, Profile, Eid, ReactionEvent } from "./models.ts";
+import { NoteEvent, Profile, Pk, Eid, ReactionEvent } from "./models.ts";
 import { pool, rankRelays } from "./network.ts";
 import { currentTime } from "./date-time.ts";
 
 // Misc profile helpers
 
-export const updateProfiles = async (pubkeys: Set<string>, relays: string[], profiles: Profile[]): Promise<void> => {
+export const updateProfiles = async (pubkeys: Set<Pk>, relays: string[], profiles: Profile[]): Promise<void> => {
   const kind = 0;
   const now = +new Date;
   const sixHours = 21600000;
 
-  const _profiles = new Map(profiles.map(p => [p.pk, p]));
+  const _profiles: [Pk, Profile][] = profiles.map(p => [p.pk, p]);
+  const _pkToProfile: Map<Pk, Profile> = new Map(_profiles);
   const pubkeysToUpdate = new Set([...pubkeys].filter(pubkey => {
-    const profile = _profiles.get(pubkey);
+    const profile = _pkToProfile.get(pubkey);
     if (profile?.l && profile!.l > now - sixHours) {
       // console.log(profile!.lastChecked, now - sixHours, profile!.lastChecked < now - sixHours);
       return false;
@@ -33,8 +34,12 @@ export const updateProfiles = async (pubkeys: Set<string>, relays: string[], pro
     return;
   }
 
+  const since = Math.min(..._profiles
+    .filter(([pk, p]) => pubkeysToUpdate.has(pk))
+    .map(([_, p]) => p.l ? p.l + 1 : 0));
+
   const { fastRelays, slowRelays } = await rankRelays(relays, { kind });
-  const filters = [{ kinds: [kind], authors: [...pubkeysToUpdate] }];
+  const filters = [{ kinds: [kind], authors: [...pubkeysToUpdate], since: since === Infinity ? 0 : since }];
   const update = async (relays: string[]) => {
     if (relays.length === 0) return;
     await pool.subscribeManyEose(relays, filters, {
@@ -49,13 +54,13 @@ export const updateProfiles = async (pubkeys: Set<string>, relays: string[], pro
             i: payload.image || payload.picture,
             n: payload.displayName || payload.display_name || payload.name,
           };
-          const storedProfile = _profiles.get(pubkey);
+          const storedProfile = _pkToProfile.get(pubkey);
           const updated = !storedProfile || !storedProfile?.i || !storedProfile?.n || storedProfile!.ts < updatedProfile.ts;
           if (updated) {
             const newProfile = storedProfile
               ? { ...storedProfile, ...updatedProfile, l: now }
               : { ...updatedProfile, l: now };
-            _profiles.set(pubkey, newProfile);
+            _pkToProfile.set(pubkey, newProfile);
             save('profiles', newProfile);
             console.log(`[zapthreads] updated profile ${pubkey}`);
           }

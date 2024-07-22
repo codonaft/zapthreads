@@ -2,7 +2,7 @@ import { modifyMutable, produce } from "solid-js/store";
 import { UnsignedEvent, Event, Nostr, VerifiedEvent } from "nostr-tools/core";
 import { normalizeURL as nostrNormalizeURL } from "nostr-tools/utils";
 import { Filter } from "nostr-tools/filter";
-import { SubCloser, AbstractPoolConstructorOptions, SubscribeManyParams } from "nostr-tools/pool";
+import { SubCloser, AbstractPoolConstructorOptions, SubscribeManyParams as SubscribeManyParamsDefault } from "nostr-tools/pool";
 import { AbstractRelay as AbstractRelay, SubscriptionParams, Subscription, type AbstractRelayConstructorOptions } from "nostr-tools/abstract-relay";
 import { getEventHash, verifyEvent } from "nostr-tools/pure";
 import { Relay, RelayRecord } from "nostr-tools/relay";
@@ -19,6 +19,8 @@ import { waitNostr } from "nip07-awaiter";
 
 export const NOTE_KINDS = [1, 9802];
 export const CONTENT_KINDS = [...NOTE_KINDS, 7, 9735];
+
+type SubscribeManyParams = SubscribeManyParamsDefault & { oneoseOnRelay?: (relay: string) => void; };
 
 const STATS_SIZE = 5;
 const LONG_TIMEOUT = 7000;
@@ -105,14 +107,13 @@ class PrioritizedPool {
     const { fastRelays, slowRelays, ranks } = await rankRelays(Object.keys(rawRequests));
     const fastOrSlowRelays = new Set([...fastRelays, slowRelays]);
 
-    const now = currentTime();
     const requests = [];
     for (const [relayUrl, filters] of Object.entries(rawRequests)) {
       if (!fastOrSlowRelays.has(relayUrl)) continue;
 
       const since = relayToSince[relayUrl];
       const newFilters: Filter[] = filters.map(f => {
-        if (f.kinds && f.kinds.filter(k => CONTENT_KINDS.includes(k)).length === f.kinds.length) {
+        if (!f.since && f.kinds && f.kinds.filter(k => CONTENT_KINDS.includes(k)).length === f.kinds.length) {
           return { ...f, since };
         }
         return f;
@@ -207,6 +208,7 @@ class PrioritizedPool {
           delete this.eventsCount[url];
           const averageLatency = deltaTime / Math.max(1, deltaEventsCount);
           addRelayStats(url, averageLatency);
+          params.oneoseOnRelay?.(url);
           handleEose(i);
         },
         onclose: reason => handleClose(i, url, reason),
@@ -239,12 +241,18 @@ class PrioritizedPool {
     filters: Filter[],
     params: Pick<SubscribeManyParams, 'id' | 'onevent' | 'onclose' | 'maxWait'>,
   ): Promise<SubCloser> {
-    const subcloser = await this.subscribeMany(relays, filters, {
-      ...params,
-      oneose() {
-        subcloser.close()
-      },
-    })
+    const fifteenMins = 15*60;
+    const until = currentTime() + fifteenMins;
+    const subcloser = await this
+      .subscribeMany(
+        relays,
+        filters.map(f => f.until ? f : { ...f, until }), {
+          ...params,
+          oneose() {
+            subcloser.close()
+          },
+        }
+      );
     return subcloser
   }
 
