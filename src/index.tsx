@@ -204,7 +204,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     }
 
     const valid =
-      (content.length <= store.maxCommentLength) &&
+      (content.trim() && content.length <= store.maxCommentLength) &&
       !spamEvent &&
       !spamPk &&
       powIsOk(id, powOrTags, minReadPow()) &&
@@ -268,7 +268,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
             const valid = await validEvent(e.id, e.pubkey, e.tags, e.kind, e.content);
             if (NOTE_KINDS.includes(e.kind)) {
               const isNoteRootEvent = queryNoteRootEvent && !store.anchorAuthor && e.id === anchor().value;
-              if (isNoteRootEvent || (valid && e.content.trim())) {
+              if (isNoteRootEvent || valid) {
                 if (isNoteRootEvent) {
                   console.log(`[zapthreads] anchor author is ${e.pubkey}`);
                   store.anchorAuthor = e.pubkey;
@@ -280,14 +280,12 @@ const ZapThreads = (props: { [key: string]: string; }) => {
               }
             } else if (e.kind === 7) {
               newLikeIds.add(e.id);
-              if (e.content.trim()) {
-                const reactionEvent = eventToReactionEvent(e, _anchor.value);
-                if (voteKind(reactionEvent) !== 0) { // remove this condition if you want to track all reactions
-                  if (valid) {
-                    save('reactions', reactionEvent);
-                  } else {
-                    remove('reactions', [e.id]); // FIXME: may not work after setting "since"
-                  }
+              const reactionEvent = eventToReactionEvent(e, _anchor.value);
+              if (voteKind(reactionEvent) !== 0) { // remove this condition if you want to track all reactions
+                if (valid) {
+                  save('reactions', reactionEvent);
+                } else {
+                  remove('reactions', [e.id]); // FIXME: may not work after setting "since"
                 }
               }
             } else if (e.kind === 9735) {
