@@ -32,18 +32,17 @@ a {
   position: relative;
   margin: 0;
   padding: 0;
-}
-
-.ztr-comment,
-.ztr-reply-button {
-  background-color: var(--ztr-background-color, rgba(0, 0, 0, 0.03));
+  padding-top: 2.5em;
 }
 
 .ztr-comment-body {
-  padding: 1em;
+  /*padding: 1em;*/
+  /*padding-bottom: 2em;*/
+  /*padding-bottom: 0.5em;*/
 }
 
 .ztr-comment:first-child {
+  padding-top: 0;
   border-top-left-radius: 0.3em;
   border-top-right-radius: 0.3em;
 }
@@ -87,9 +86,17 @@ ul.ztr-comment-info-items li a {
   font-weight: 600;
 }
 
+ul.ztr-comment-info-items li a small {
+  /* color: rgba(0,0,0,0.5); */
+}
+
 .ztr-comment-info-author a {
   font-size: 1.2em;
   padding-right: 0.2em;
+}
+
+.ztr-comment-info-author a:hover {
+  text-decoration: underline;
 }
 
 .ztr-comment-info-dots {
@@ -152,7 +159,12 @@ ul.ztr-comment-info-items li a {
   word-wrap: break-word;
 }
 
+.ztr-comment-text a {
+  color: var(--ztr-action-color, #96609c);
+}
+
 .ztr-comment-text a:hover {
+  color: var(--ztr-action-hover-color);
   text-decoration: underline;
 }
 
@@ -178,38 +190,55 @@ ul.ztr-comment-info-items li a {
 }
 
 .ztr-comment-replies-info-actions {
+  /*min-height: 2.5em;
+  align-items: center;*/
+  padding-bottom: 0.5em;
+  margin-left: 0.22em; /* wat */
 }
 
 .ztr-comment-replies-info-items {
-  margin: -0.5em;
   display: flex;
   list-style: none;
   font-size: 0.9em;
   font-weight: 600;
-  color: #BBB;
+  color: #6d6d6d;
   cursor: pointer;
   width: 10em;
   li {
     padding: 1em;
     padding-left: 1.3em;
-    margin: -0.8em;
+    margin: -0.6em;
+    margin-left: -1em;
   }
 }
 
 .ztr-comment-replies-info-items.selected {
-  margin-bottom: 1.1em;
-  color: #0288d1;
+  color: var(--ztr-action-color, #96609c);
   svg {
-    fill: #0288d1;
+    fill: var(--ztr-action-color, #96609c);
   }
 }
 
 .ztr-comment-replies-info-items:hover svg {
-  fill: #0288d1;
+  fill: white;
 }
 
 .ztr-comment-replies-info-items:hover li {
-  color: #0288d1;
+  color: white;
+}
+
+ul.ztr-comment-replies-info-items {
+  border-radius: 1.4rem;
+  min-height: 3em;
+  align-items: center;
+  padding: 0;
+  justify-content: center;
+  width: 9em;
+}
+
+ul.ztr-comment-replies-info-items:hover {
+  background: var(--ztr-action-color, #96609c);
+  color: white;
 }
 
 .highlight p {
@@ -224,7 +253,6 @@ ul.ztr-comment-info-items li a {
 .ztr-comment-expand {
   display: flex;
   position: relative;
-  /*z-index: 1;*/
   max-width: fit-content;
   padding-top: 0.8em;
   padding-bottom: 0.5em;
@@ -235,10 +263,11 @@ ul.ztr-comment-info-items li a {
   margin-bottom: 0.5em;
   font-weight: 600;
   cursor: pointer;
+  color: #2B2B2B;
 }
 
 .ztr-comment-expand:hover span {
-  color: #0288d1;
+  color: var(--ztr-action-color, #96609c);
 }
 
 ul.ztr-comment-actions {
@@ -262,17 +291,6 @@ ul.ztr-comment-actions li {
   padding: 1em;
   margin: -0.125em;
   cursor: pointer;
-}
-
-ul.ztr-comment-actions li span {
-  padding: 0.25em 0.25em 0 0.25em;
-  color: var(--ztr-icon-color, #3B3B3B);
-}
-
-svg {
-  fill: var(--ztr-icon-color, #3B3B3B);
-  width: 1.1em;
-  height: 1.1em;
 }
 
 li.ztr-comment-action-upvote {
@@ -300,14 +318,6 @@ li.ztr-comment-action-like {
   margin-right: 0.7em;
 }
 
-.ztr-comment-action-reply:hover svg {
-  fill: #0288d1;
-}
-
-.ztr-comment-action-reply:hover span {
-  color: #0288d1;
-}
-
 .ztr-comment-action-zap:hover svg {
   fill: #e4984d;
 }
@@ -325,30 +335,30 @@ li.ztr-comment-action-like {
 }
 
 .ztr-comment-action-upvote:hover svg {
-  fill: #0288d1;
+  fill: var(--ztr-action-color, #96609c);
 }
 
 .ztr-comment-action-upvote:hover span {
-  color: #0288d1;
+  color: var(--ztr-action-color, #96609c);
 }
 
 .ztr-comment-action-upvote.selected {
   svg {
-    fill: #0288d1;
+    fill: var(--ztr-action-color, #96609c);
   }
 }
 
 .ztr-comment-action-downvote:hover svg {
-  fill: #0288d1;
+  fill: var(--ztr-action-color, #96609c);
 }
 
 .ztr-comment-action-downvote:hover span {
-  color: #0288d1;
+  color: var(--ztr-action-color, #96609c);
 }
 
 .ztr-comment-action-downvote.selected {
   svg {
-    fill: #0288d1;
+    fill: var(--ztr-action-color, #96609c);
   }
 }
 
@@ -412,24 +422,43 @@ li.ztr-comment-action-votes {
 .ztr-reply-controls button {
   font-family: var(--ztr-font);
   appearance: none;
-  border: none;
-  padding: 0.5em 1em;
-  border-radius: 0.2em;
-  font-size: 0.85em;
+  padding: 0.5em 1.4em;
+  min-height: 3em;
+  border-radius: 1.4rem;
+  font-size: 0.95em;
   font-weight: 600;
   cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.ztr-reply-controls button:hover {
+  color: white;
+  background: var(--ztr-action-color, #96609c);
 }
 
 .ztr-reply-login-button {
-  color: white;
-  background-color: var(--ztr-login-button-color, #2B2B2B);
-  margin-left: 1em;
+  color: var(--ztr-action-color, #96609c);
+  background-color: white;
+  border: 1px solid var(--ztr-action-color, #96609c);
+}
+
+.ztr-reply-login-button svg {
+  fill: var(--ztr-action-color, #96609c);
+  width: 2em;
+  height: 2em;
+}
+
+.ztr-reply-login-button:hover svg {
+  fill: white;
 }
 
 .ztr-reply-button {
   color: var(--ztr-text-color);
   display: flex;
   align-items: center;
+  border: 1px solid transparent;
 }
 
 .ztr-info-pane {
@@ -499,36 +528,30 @@ li.ztr-comment-action-votes {
   padding: 0;
 }
 
-/* Dark mode defaults */
+.ztr-spinner .path {
+  stroke: var(--ztr-text-color, #DEDEDE);
+}
 
-/* @media (prefers-color-scheme: dark) { */
-  .ztr-spinner .path {
-    stroke: var(--ztr-text-color, #DEDEDE);
-  }
+.ztr-comment,
+.ztr-reply-button {
+  background-color: var(--ztr-background-color, rgba(255, 255, 255, 0.06));
+}
 
-  .ztr-comment,
-  .ztr-reply-button {
-    background-color: var(--ztr-background-color, rgba(255, 255, 255, 0.06));
-  }
+svg {
+  width: 1.1em;
+  height: 1.1em;
+  fill: var(--ztr-icon-color, #6d6d6d);
+}
 
-  .ztr-reply-login-button {
-    color: #2B2B2B;
-    background-color: var(--ztr-login-button-color, #DEDEDE);
-  }
+ul.ztr-comment-actions li span {
+  padding: 0.25em 0.25em 0 0.25em;
+  color: var(--ztr-icon-color, #6d6d6d);
+}
 
-  svg {
-    fill: var(--ztr-icon-color, #DEDEDE);
-  }
+.ztr-comment-action-reply:hover svg {
+  fill: var(--ztr-action-color, #96609c);
+}
 
-  ul.ztr-comment-actions li span {
-    color: var(--ztr-icon-color);
-  }
-
-  .ztr-comment-action-reply:hover svg {
-    fill: #0288d1;
-  }
-
-  .ztr-comment-action-reply:hover span {
-    color: #0288d1;
-  }
-/* } */
+.ztr-comment-action-reply:hover span {
+  color: var(--ztr-action-color, #96609c);
+}

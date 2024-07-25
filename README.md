@@ -100,9 +100,10 @@ Available CSS variables (define in `zap-threads`):
   - `--ztr-font-size`
   - `--ztr-text-color`
   - `--ztr-link-color`
+  - `--ztr-action-color`
+  - `--ztr-action-hover-color`
   - `--ztr-background-color`
   - `--ztr-icon-color`
-  - `--ztr-login-button-color`
 
 For more advanced CSS control via `shadowRoot`:
 
