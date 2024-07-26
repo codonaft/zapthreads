@@ -362,6 +362,10 @@ li.ztr-comment-action-like {
   }
 }
 
+.ztr-comment-action-remove:hover svg {
+  fill: var(--ztr-action-color, #96609c);
+}
+
 li.ztr-comment-action-votes {
   justify-content: center;
   span {

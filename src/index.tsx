@@ -482,3 +482,8 @@ ZapThreads.onEvent = function (cb?: (event: { kind: number; content: string; }) 
   store.onEvent = cb;
   return ZapThreads;
 };
+
+ZapThreads.onRemove = function (cb?: (event: { content: string; }) => Promise<{ accepted: boolean; }>) {
+  store.onRemove = cb;
+  return ZapThreads;
+};

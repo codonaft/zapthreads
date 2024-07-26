@@ -103,6 +103,7 @@ export type PreferencesStore = {
   profiles: () => Profile[];
   onLogin?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin: boolean }>;
   onEvent?: (event: { kind: number; content: string; }) => { sanitizedContent?: string; rank?: number; };
+  onRemove?: (event: { content: string; }) => Promise<{ accepted: boolean }>;
 };
 
 export type Anchor = { type: 'http' | 'naddr' | 'note' | 'error', value: string; };

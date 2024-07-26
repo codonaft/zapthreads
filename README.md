@@ -122,6 +122,9 @@ ZapThreads
     }
     return { accepted: true, autoLogin: true };
   })
+  .onRemove(async ({ content }) => {
+    return { accepted: true };
+  })
   .onEvent(({ kind, content }) => {
     if (kind === 1 && content.includes('poker')) {
       throw new Error("No spamming please, we're discussing important things here");
