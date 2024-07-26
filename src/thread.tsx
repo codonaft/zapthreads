@@ -154,8 +154,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
             });
           });
 
-          // TODO: move?
-          const toggleVote = async (reaction: VoteKind, note: NoteEvent) => {
+          const toggleVote = async (reaction: VoteKind) => {
             const s = await getSigner();
             if (!s) {
               return;
@@ -164,7 +163,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
             const latestVote = currentUserVote();
             const newVote = latestVote === reaction ? 0 : reaction;
 
-            const rootEventId = note.ro || store.version || store.rootEventIds[0];
+            const rootEventId = event().ro || store.version || store.rootEventIds[0];
 
             const publishVote = async () => {
               const tags = [];
@@ -179,7 +178,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
                 pubkey: signer.pk,
                 tags: [
                   ...tags,
-                  ['e', note.id, '', 'reply'],
+                  ['e', event().id, '', 'reply'],
                   ['p', signer.pk],
                 ],
               }, signer);
@@ -210,20 +209,23 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
             }
           };
 
-          // TODO: move?
-          const removeEvent = async (note: NoteEvent) => {
-            const signer = signersStore.active;
+          const removeEvent = async () => {
+            const s = await getSigner();
+            if (!s) {
+              return;
+            }
+            const signer = s!;
             if (signer && (!store.onRemove || (await store.onRemove!({ content: context().text.value })).accepted)) {
-              const id = note.id;
+              const eid = event().id;
               const sentRequest = await signAndPublishEvent({
                 kind: 5,
                 created_at: currentTime(),
                 content: '',
                 pubkey: signer.pk,
-                tags: [['e', id]],
+                tags: [['e', eid]],
               }, signer);
               if (sentRequest) {
-                remove('events', [id]);
+                remove('events', [eid]);
               }
             }
           };
@@ -308,17 +310,17 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
 
               <ul class="ztr-comment-actions">
                 {<Show when={!store.disableFeatures!.includes('votes')}>
-                  <li class="ztr-comment-action-upvote" classList={{selected: currentUserVote() === 1}} onClick={() => toggleVote(1, event())}>
+                  <li class="ztr-comment-action-upvote" classList={{selected: currentUserVote() === 1}} onClick={() => toggleVote(1)}>
                     {currentUserVote() === 1 ? upvoteSelectedSvg() : upvoteSvg()}
                   </li>
                   <li class="ztr-comment-action-votes">
                     <span>{hasVotes() ? votesCount() : 'Vote'}</span>
                   </li>
-                  <li class="ztr-comment-action-downvote" classList={{selected: currentUserVote() === -1}} onClick={() => toggleVote(-1, event())}>
+                  <li class="ztr-comment-action-downvote" classList={{selected: currentUserVote() === -1}} onClick={() => toggleVote(-1)}>
                     {currentUserVote() === -1 ? downvoteSelectedSvg() : downvoteSvg()}
                   </li>
                 </Show>}
-                {writtenByCurrentUser() && <li class="ztr-comment-action-remove" onClick={() => removeEvent(event())}>{removeSvg()}</li>}
+                {writtenByCurrentUser() && <li class="ztr-comment-action-remove" onClick={() => removeEvent()}>{removeSvg()}</li>}
                 {/* <Show when={!store.disableFeatures!.includes('zaps')}>
                   <li class="ztr-comment-action-zap">
                     {lightningSvg()}

@@ -122,7 +122,7 @@ ZapThreads
     }
     return { accepted: true, autoLogin: true };
   })
-  .onRemove(async ({ content }) => {
+  .onRemove(async ({}) => {
     return { accepted: true };
   })
   .onEvent(({ kind, content }) => {

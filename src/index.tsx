@@ -232,7 +232,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     console.log(`[zapthreads] subscribing to ${_anchor.value} on`, [..._readRelays]);
 
     const queryNoteRootEvent = !store.anchorAuthor && anchor().type === 'note';
-    const rootEventFilter = queryNoteRootEvent ? [{ ids: [anchor().value], kinds: NOTE_KINDS, limit: 1 }] : []; // TODO: minReadPow
+    const rootEventFilter = queryNoteRootEvent ? [{ ids: [anchor().value], kinds: NOTE_KINDS, limit: 1 }] : [];
     const request = (url: string) => [url, [...rootEventFilter, { ..._filter, kinds: CONTENT_KINDS }]];
 
     const newLikeIds = new Set<string>();
