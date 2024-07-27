@@ -76,6 +76,8 @@ Arguments:
    - ignores relays with unsupported language (unless `relayInformation` is disabled)
    - labels comments sent from the client with the language tag
      - note: there's no validation whether user actually sent message in this language, use `onEvent` to validate it
+ - `client`: string with client name (like `zapthreads` or your domain name, etc.)
+   - adds client tag, unset by default
  - `max-comment-length`: limit comment length, disabled by default
  - `min-read-pow` and `max-write-pow`: difficulty boundaries that determine how warm we make our planet while desperately fighting spam, `0` by default
    - ignores events sent with difficulty less than `min-read-pow`
@@ -127,7 +129,7 @@ ZapThreads
   .onRemove(async ({}) => {
     return { accepted: true };
   })
-  .onEvent(({ kind, content }) => {
+  .onEvent(({ kind, content, client }) => {
     if (kind === 1 && content.includes('poker')) {
       throw new Error("No spamming please, we're discussing important things here");
     }

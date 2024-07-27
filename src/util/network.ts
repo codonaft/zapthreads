@@ -11,7 +11,7 @@ import { getPow, minePow } from "nostr-tools/nip13";
 import { npubEncode } from "nostr-tools/nip19";
 import { find, findAll, save, onSaved, remove } from "./db.ts";
 import { EventSigner, store, signersStore } from "./stores.ts";
-import { Eid, RelayInfo, RelayStats, Pk, eventToNoteEvent, NoteEvent } from "./models.ts";
+import { Eid, RelayInfo, RelayStats, Pk, eventToNoteEvent, NoteEvent, parseClient } from "./models.ts";
 import { medianOrZero, maxBy } from "./collections.ts";
 import { currentTime, MIN_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, SIX_HOURS_IN_SECS } from "./date-time.ts";
 import { getRelayLatest, errorText, parseContent } from "./ui.ts";
@@ -579,6 +579,10 @@ export const shortFetch = (url: string, options?: any) => fetch(url, {
 
 // TODO: move
 export const sign = async (unsignedEvent: UnsignedEvent, signer: EventSigner) => {
+  if (store.client && unsignedEvent.tags.filter(tag => tag.length > 0 && tag[0] === 'client').length === 0) {
+    unsignedEvent.tags.push(['client', store.client]);
+  }
+
   const pow = store.writePowDifficulty;
   let event: Event;
   if (pow > 0) {
@@ -698,8 +702,9 @@ export const validateEvent = (e: UnsignedEvent & { id: undefined } | Event, minR
   };
 
   preValidate({ id: e.id, pubkey: e.pubkey, kind: e.kind, powOrTags: e.tags, content: e.content }, minReadPow);
+  const client = parseClient(e.tags);
   const result = store.onEvent
-    ? store.onEvent({ kind: e.kind, content: e.content }) // FIXME: parseContent? nope, it's not note
+    ? store.onEvent({ kind: e.kind, content: e.content, client }) // FIXME: parseContent? nope, it's not note
     : { sanitizedContent: e.content, rank: undefined };
   return { ...result, noteEvent: undefined };
 };
@@ -707,7 +712,7 @@ export const validateEvent = (e: UnsignedEvent & { id: undefined } | Event, minR
 export const validateNoteEvent = (e: NoteEvent, minReadPow?: number) => {
   preValidate({ id: e.id, pubkey: e.pk, kind: e.k, powOrTags: e.pow, content: e.c }, minReadPow);
   const result = store.onEvent
-    ? store.onEvent({ kind: e.k, content: parseContent(e, store) })
+    ? store.onEvent({ kind: e.k, content: parseContent(e, store), client: e.client })
     : { sanitizedContent: e.c, rank: undefined }
   return { ...result, noteEvent: e };
 };

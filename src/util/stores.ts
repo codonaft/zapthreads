@@ -80,6 +80,7 @@ export type PreferencesStore = {
   userStartedReadingComments: boolean,
   commentContexts: Map<Eid, CommentContext>,
 
+  client?: string;
   language?: string,
   maxCommentLength: number,
   writePowDifficulty: number;
@@ -101,7 +102,7 @@ export type PreferencesStore = {
   anchorAuthor?: string;
   profiles: () => Profile[];
   onLogin?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin: boolean }>;
-  onEvent?: (event: { kind: number; content: string; }) => { sanitizedContent?: string; rank?: number; };
+  onEvent?: (event: { kind: number; content: string; client?: string; }) => { sanitizedContent?: string; rank?: number; };
   onRemove?: (event: { content: string; }) => Promise<{ accepted: boolean }>;
 };
 

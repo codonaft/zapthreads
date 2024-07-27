@@ -23,6 +23,7 @@ export type NoteEvent = {
   d?: string; // d tag
   tl?: string; // title
   pow: number;
+  client?: string;
 };
 
 export type NoteId = string;
@@ -218,6 +219,8 @@ export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion
 
 // util
 
+export const parseClient = (tags: string[][]) => tags.filter(tag => tag.length === 2 && tag[0] === 'client').map(tag => tag[1])[0];
+
 export const eventToNoteEvent = (e: UnsignedEvent & { id?: string; }): NoteEvent => {
   const nip10result = parse(e);
 
@@ -234,6 +237,7 @@ export const eventToNoteEvent = (e: UnsignedEvent & { id?: string; }): NoteEvent
   const tl = titleTag && titleTag[1];
   const nonce = e.tags.find(t => t.length > 2 && t[0] === 'nonce');
   const pow = nonce && +nonce[2] || 0;
+  const client = parseClient(e.tags);
 
   return {
     id: e.id ?? "",
@@ -252,6 +256,7 @@ export const eventToNoteEvent = (e: UnsignedEvent & { id?: string; }): NoteEvent
     d,
     tl,
     pow,
+    client,
   };
 };
 
