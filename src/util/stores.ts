@@ -17,7 +17,6 @@ export const store = createMutable<PreferencesStore>({
   userStartedReadingComments: false,
   commentContexts: new Map,
 
-  languages: [],
   maxCommentLength: 0,
   writePowDifficulty: 0,
   minReadPow: 0,
@@ -81,7 +80,7 @@ export type PreferencesStore = {
   userStartedReadingComments: boolean,
   commentContexts: Map<Eid, CommentContext>,
 
-  languages: string[],
+  language?: string,
   maxCommentLength: number,
   writePowDifficulty: number;
   minReadPow: number;

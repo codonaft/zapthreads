@@ -20,6 +20,7 @@ import { Filter } from "nostr-tools/filter";
 import { SubCloser } from "nostr-tools/pool";
 import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, RelayInfo, Eid, Pk, Block } from "./util/models.ts";
 import { updateBlockFilters, loadBlockFilters } from "./util/block-lists.ts";
+import { validateAndSetLanguage } from "./util/language.ts";
 
 const ZapThreads = (props: { [key: string]: string; }) => {
   const minReadPow = () => +props.minReadPow;
@@ -55,11 +56,11 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     store.disableFeatures = props.disable.split(',').map(e => e.trim()).filter(isDisableType);
     store.urlPrefixes = parseUrlPrefixes(props.urls);
     store.replyPlaceholder = props.replyPlaceholder;
-    store.languages = props.languages.split(',').map(e => e.trim()).filter(i => i.length > 0);
     store.maxCommentLength = +props.maxCommentLength || Infinity;
     store.minReadPow = minReadPow();
     store.maxWritePow = maxWritePow();
     store.writePowDifficulty = Math.max(store.writePowDifficulty, minReadPow());
+    validateAndSetLanguage(props.language);
   });
 
   onMount(async () => {
@@ -448,7 +449,7 @@ customElement<ZapThreadsAttributes>('zap-threads', {
   urls: "",
   'reply-placeholder': "",
   'legacy-url': "",
-  languages: '',
+  language: '',
   'max-comment-length': '',
   'min-read-pow': '',
   'max-write-pow': '',
@@ -462,7 +463,7 @@ customElement<ZapThreadsAttributes>('zap-threads', {
     urls={props['urls'] ?? ''}
     replyPlaceholder={props['reply-placeholder'] ?? ''}
     legacyUrl={props['legacy-url'] ?? ''}
-    languages={props['languages'] ?? ''}
+    language={props['language'] ?? ''}
     maxCommentLength={props['max-comment-length'] ?? ''}
     minReadPow={props['min-read-pow'] ?? ''}
     maxWritePow={props['max-write-pow'] ?? ''}
@@ -470,7 +471,7 @@ customElement<ZapThreadsAttributes>('zap-threads', {
 });
 
 export type ZapThreadsAttributes = {
-  [key in 'anchor' | 'version' | 'relays' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'languages' | 'max-comment-length' | 'min-read-pow' | 'max-write-pow']?: string;
+  [key in 'anchor' | 'version' | 'relays' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'language' | 'max-comment-length' | 'min-read-pow' | 'max-write-pow']?: string;
 } & JSX.HTMLAttributes<HTMLElement>;
 
 ZapThreads.onLogin = function (cb?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin: boolean; }>) {

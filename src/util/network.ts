@@ -430,10 +430,8 @@ const supportedReadRelay = (info?: RelayInformation, relayInfo?: RelayInfo) => {
   if (relayInfo?.readAuth === true) return false;
   if (!info) return true;
 
-  const languages = store.languages;
-  if (languages.length > 0 && info.language_tags && info.language_tags.length > 0) {
-    if (languages.filter(lang => info.language_tags!.includes(lang)).length !== languages.length) return false;
-  }
+  const language = store.language;
+  if (language && info.language_tags && info.language_tags.length > 0 && !info.language_tags!.includes(language)) return false;
 
   return true;
 };

@@ -72,8 +72,10 @@ Arguments:
  - `urls`: comma-separated pairs of URLs
    - defaults to `naddr:nostr.com/,npub:nostr.com/,nprofile:nostr.com/,nevent:nostr.com/,note:nostr.com/,tag:snort.social/t/`
    - `https://` will be automatically prepended
- - `languages`: comma-separated string of allowed languages, no restrictions by default
-   - ignores relays with unsupported languages
+ - `language`: allowed language (ISO-639-1 two-letter code only), no restrictions by default
+   - ignores relays with unsupported language (unless `relayInformation` is disabled)
+   - labels comments sent from the client with the language tag
+     - note: there's no validation whether user actually sent message in this language, use `onEvent` to validate it
  - `max-comment-length`: limit comment length, disabled by default
  - `min-read-pow` and `max-write-pow`: difficulty boundaries that determine how warm we make our planet while desperately fighting spam, `0` by default
    - ignores events sent with difficulty less than `min-read-pow`

@@ -165,6 +165,11 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
       unsignedEvent.tags.push(['a', anchor().value, '', 'root']);
     }
 
+    if (store.language) {
+      unsignedEvent.tags.push(['L', 'ISO-639-1']);
+      unsignedEvent.tags.push(['l', store.language!, 'ISO-639-1']);
+    }
+
     setLoading(true);
     if (store.disableFeatures!.includes('publish')) {
       // Simulate publishing
