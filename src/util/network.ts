@@ -1,11 +1,12 @@
 import { modifyMutable, produce } from "solid-js/store";
 import { UnsignedEvent, Event, Nostr, VerifiedEvent } from "nostr-tools/core";
 import { normalizeURL as nostrNormalizeURL } from "nostr-tools/utils";
-import { Filter } from "nostr-tools/filter";
+import { Filter, matchFilter } from "nostr-tools/filter";
 import { SubCloser, AbstractPoolConstructorOptions, SubscribeManyParams as SubscribeManyParamsDefault } from "nostr-tools/pool";
 import { AbstractRelay as AbstractRelay, SubscriptionParams, Subscription, type AbstractRelayConstructorOptions } from "nostr-tools/abstract-relay";
 import { getEventHash, verifyEvent } from "nostr-tools/pure";
 import { Relay, RelayRecord } from "nostr-tools/relay";
+import { ShortTextNote, Metadata, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
 import { RelayInformation } from "nostr-tools/nip11";
 import { getPow, minePow } from "nostr-tools/nip13";
 import { npubEncode } from "nostr-tools/nip19";
@@ -14,12 +15,12 @@ import { EventSigner, store, signersStore } from "./stores.ts";
 import { Eid, RelayInfo, RelayStats, Pk, eventToNoteEvent, NoteEvent, parseClient } from "./models.ts";
 import { medianOrZero, maxBy } from "./collections.ts";
 import { currentTime, MIN_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, SIX_HOURS_IN_SECS } from "./date-time.ts";
-import { getRelayLatest, errorText, parseContent } from "./ui.ts";
+import { errorText, parseContent } from "./ui.ts";
 import { updateBlockFilters, loadBlockFilters, applyBlock } from "./block-lists.ts";
 import { waitNostr } from "nip07-awaiter";
 
-export const NOTE_KINDS = [1, 9802];
-export const CONTENT_KINDS = [...NOTE_KINDS, 7, 9735];
+export const NOTE_KINDS = [ShortTextNote, Highlights];
+export const CONTENT_KINDS = [...NOTE_KINDS, Reaction, Zap];
 
 type SubscribeManyParams = SubscribeManyParamsDefault & { oneoseOnRelay?: (relay: string) => void; };
 
@@ -35,6 +36,7 @@ class PrioritizedPool {
 
   private _WebSocket?: typeof WebSocket
   private eventsCount: { [relay: string]: number; } = {};
+  private eventsTs: { [key: string]: number; } = {};
 
   constructor(opts: AbstractPoolConstructorOptions) {
     this.verifyEvent = opts.verifyEvent
@@ -103,27 +105,20 @@ class PrioritizedPool {
   }
 
   async subscribeManyMap(rawRequests: { [relay: string]: Filter[] }, params: SubscribeManyParams): Promise<SubCloser> {
-    const relayToSince = await getRelayLatest(store.anchor!);
-
     const { fastRelays, slowRelays, ranks } = await rankRelays(Object.keys(rawRequests));
     const fastOrSlowRelays = new Set([...fastRelays, slowRelays]);
 
     const requests = [];
     for (const [relayUrl, filters] of Object.entries(rawRequests)) {
       if (!fastOrSlowRelays.has(relayUrl)) continue;
-
-      const since = relayToSince[relayUrl];
-      const newFilters: Filter[] = filters.map(f => {
-        if (!f.since && f.kinds && f.kinds.filter(k => CONTENT_KINDS.includes(k)).length === f.kinds.length) {
-          return { ...f, since };
-        }
-        return f;
-      });
-
+      const newFilters: Filter[] = [];
+      for (const f of filters) {
+        newFilters.push({ ...f, since: await this.getSince(relayUrl, f) });
+      }
       requests.push({
         url: relayUrl,
         filters: newFilters,
-        maxSince: Math.max(...newFilters.map(f => f.since || 0)),
+        maxSince: Math.max(...newFilters.map(f => f.since!)),
         latency: ranks.get(relayUrl)!,
       });
     }
@@ -203,6 +198,12 @@ class PrioritizedPool {
       const startTime = Date.now();
       const subscription = relay.subscribe(filters, {
         ...params,
+        onevent: (event: Event) => {
+          filters
+            .filter(f => matchFilter(f, event))
+            .forEach(f => this.saveSince(url, f, event.created_at));
+          params.onevent?.(event);
+        },
         oneose: () => {
           const deltaTime = Date.now() - startTime;
           const deltaEventsCount = (this.eventsCount[url] || 0) - startEventsCount;
@@ -392,6 +393,31 @@ class PrioritizedPool {
     }));
     store.writePowDifficulty = Math.max(store.minReadPow, ...writeRelaysPows);
   }
+
+  private async getSince(relayUrl: string, filter: Filter) {
+    if (filter.since) return filter.since!;
+    if (!store.anchor) return 0;
+
+    const key = filterCacheKey(relayUrl, filter);
+    if (this.eventsTs[key] !== undefined) return this.eventsTs[key];
+
+    const relay = await find('relays', IDBKeyRange.only(key));
+    if (!relay) return 0;
+
+    const hour = 3600;
+    const now = currentTime();
+    const updatedLongTimeAgo = relay.l + hour < now;
+    const since = Math.max(0, updatedLongTimeAgo ? relay.l + 1 : relay.l - hour); // make sure we don't miss events sent from machines with poor network or poor time sync
+    return since;
+  }
+
+  private saveSince(relayUrl: string, filter: Filter, ts: number) {
+    if (!store.anchor || filter.kinds?.includes(Metadata)) return;
+    const key = filterCacheKey(relayUrl, filter);
+    const since = Math.max(this.eventsTs[key] || 0, ts);
+    this.eventsTs[key] = since;
+    save('relays', { key, l: since });
+  }
 }
 
 export const pool = new PrioritizedPool({ verifyEvent, websocketImplementation: undefined });
@@ -402,7 +428,7 @@ const addRelayStats = async (relayUrl: string, latency: number, kind: number = -
   const lastStat = maxBy(stats, s => s.ts);
   save('relayStats', {
     name: relayUrl,
-    kind: kind,
+    kind,
     serial: lastStat ? (lastStat.serial + (overwrite ? 0 : 1)) % STATS_SIZE : 0,
     latency,
     ts: currentTime(),
@@ -441,7 +467,7 @@ const supportedWriteRelay = (event?: Event, info?: RelayInformation) => {
   if (!supportedReadRelay(info)) return false;
 
   /* TODO: enable when more relays will report they support NIP-25
-  const requiredNips = event.kind === 7 ? [25] : [];
+  const requiredNips = event.kind === Reaction ? [25] : [];
   if (info.supported_nips.length > 0 && requiredNips.filter(n => info.supported_nips.includes(n)).length !== requiredNips.length) {
     return false;
   }*/
@@ -678,7 +704,7 @@ export const manualLogin = async () => {
   }
 
   if (autoLogin) {
-    save('sessions', { pk, autoLogin: +autoLogin });
+    save('sessions', { pk, autoLogin: +(autoLogin === true) });
   }
 
   await pool.updateRelays();
@@ -705,7 +731,7 @@ export const validateEvent = (e: UnsignedEvent & { id: undefined } | Event, minR
   const client = parseClient(e.tags);
   const result = store.onEvent
     ? store.onEvent({ kind: e.kind, content: e.content, client }) // FIXME: parseContent? nope, it's not note
-    : { sanitizedContent: e.content, rank: undefined };
+    : { sanitizedContent: e.content, rank: undefined, showReportButton: false };
   return { ...result, noteEvent: undefined };
 };
 
@@ -713,7 +739,7 @@ export const validateNoteEvent = (e: NoteEvent, minReadPow?: number) => {
   preValidate({ id: e.id, pubkey: e.pk, kind: e.k, powOrTags: e.pow, content: e.c }, minReadPow);
   const result = store.onEvent
     ? store.onEvent({ kind: e.k, content: parseContent(e, store), client: e.client })
-    : { sanitizedContent: e.c, rank: undefined }
+    : { sanitizedContent: e.c, rank: undefined, showReportButton: false }
   return { ...result, noteEvent: e };
 };
 
@@ -734,4 +760,14 @@ const preValidate = (e: { id: Eid | undefined; pubkey: Pk; kind: number; powOrTa
   if (!e.content.trim() && e.content.length > store.maxCommentLength) throw new Error('Invalid message length');
 
   if (e.id !== undefined && minReadPow !== undefined && !powIsOk(e.id, e.powOrTags, minReadPow)) throw new Error('NIP-13 PoW is not okay');
+}
+
+const filterCacheKey = (relayUrl: string, filter: Filter) => {
+  const ignored = ['since', 'until', 'limit'];
+  const value = Object.fromEntries(Object
+   .entries(filter)
+   .filter(([k, _]) => !ignored.includes(k))
+   .sort());
+  const items = [relayUrl, store.anchor!.value, value];
+  return JSON.stringify(items);
 }

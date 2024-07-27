@@ -58,6 +58,9 @@ Arguments:
  - `author`:
    - This npub will be added as a `p` tag to all comments
    - Useful for notifying the author of a website (http anchor)
+ - `community`: retrieve trusted moderators from here
+   - anchor author (including `author`) is automatically a moderator
+   - comments reported by moderator are hidden
  - `disable`: comma-separated string of features to disable, all enabled by default
    - `likes`
    - `votes`
@@ -72,7 +75,8 @@ Arguments:
  - `urls`: comma-separated pairs of URLs
    - defaults to `naddr:nostr.com/,npub:nostr.com/,nprofile:nostr.com/,nevent:nostr.com/,note:nostr.com/,tag:snort.social/t/`
    - `https://` will be automatically prepended
- - `language`: allowed language (ISO-639-1 two-letter code only), no restrictions by default
+ - `language`: allowed language, no restrictions by default
+   - ISO-639-1 two-letter code only
    - ignores relays with unsupported language (unless `relayInformation` is disabled)
    - labels comments sent from the client with the language tag
      - note: there's no validation whether user actually sent message in this language, use `onEvent` to validate it
@@ -129,12 +133,15 @@ ZapThreads
   .onRemove(async ({}) => {
     return { accepted: true };
   })
+  .onReport(async ({}) => {
+    return { accepted: true, list: 'event', type: 'other', reason: '' };
+  })
   .onEvent(({ kind, content, client }) => {
     if (kind === 1 && content.includes('poker')) {
       throw new Error("No spamming please, we're discussing important things here");
     }
     const rank = content.length > 1000 ? -1 : 0;
-    return { sanitizedContent: content.replaceAll('perkele', 'mind-blowing'), rank };
+    return { sanitizedContent: content.replaceAll('perkele', 'mind-blowing'), rank, showReportButton: rank < 0 };
   })
 ```
 

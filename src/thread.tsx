@@ -7,6 +7,7 @@ import { NestedNoteEvent } from "./util/nest.ts";
 import { noteEncode, npubEncode } from "nostr-tools/nip19";
 import { UnsignedEvent, Event } from "nostr-tools/core";
 import { Relay } from "nostr-tools/relay";
+import { Metadata, ShortTextNote, EventDeletion, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
 import { EventSigner, signersStore, store, CommentContext } from "./util/stores.ts";
 import { NoteEvent, Profile, Pk, ReactionEvent, VoteKind, Eid, voteKind } from "./util/models.ts";
 import { remove } from "./util/db.ts";
@@ -24,7 +25,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
 
   const topNestedEvents = () => props.topNestedEvents();
   const bottomNestedEvents = () => props.bottomNestedEvents ? props.bottomNestedEvents() : [];
-  const firstLevelComments = () => props.firstLevelComments && props.firstLevelComments() || 0;
+  const firstLevelComments = () => props.firstLevelComments ? props.firstLevelComments() : 0;
   const userObservedComments = () => store.userObservedComments;
 
   const validateAndRank = (events: NestedNoteEvent[]) => {
@@ -35,8 +36,14 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
       if (rank === undefined) {
         try {
           // computing most recent rank and validation result
-          rank = validateNoteEvent(e).rank || 0;
+          const validationResult = validateNoteEvent(e);
+
+          rank = validationResult.rank || 0;
           store.ranks.set(e.id, rank);
+
+          if (validationResult.showReportButton === true) {
+            store.showReportButton.add(e.id);
+          }
         } catch (err) {
           applyBlock('eventsBlocked', e.id, errorText(err));
           invalidEvents.push(e.id);
@@ -52,7 +59,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
 
   const events = () => {
     const topEvents = validateAndRank(sortByDate(topNestedEvents(), !props.firstLevelComments))
-      .sort((a, b) => a.rank - b.rank)
+      .sort((a, b) => props.firstLevelComments ? b.rank - a.rank : 0)
       .map(({ e }) => e);
     const bottomEvents = validateAndRank(bottomNestedEvents()).map(({ e }) => e);
     return [...topEvents, ...bottomEvents];
@@ -65,10 +72,8 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
           const isRootEvent = !event().parent;
           const total = createMemo(() => totalChildren(event()));
           const tooLongCommentsSection = () => firstLevelComments() >= MIN_AUTO_COLLAPSED_THREADS || total() >= MIN_AUTO_COLLAPSED_COMMENTS;
-          const writtenByCurrentUser = () => {
-            const signer = signersStore.active;
-            return signer && event().pk === signer!.pk
-          };
+          const writtenByCurrentUser = () => event().pk === signersStore.active?.pk;
+          const currentUserIsModerator = () => signersStore.active && store.moderators.has(signersStore.active!.pk);
 
           const context: () => CommentContext = () => {
             const result = store.commentContexts.get(event().id);
@@ -172,7 +177,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               }
 
               await signAndPublishEvent({
-                kind: 7,
+                kind: Reaction,
                 created_at: currentTime(),
                 content: newVote === -1 ? '-' : '+',
                 pubkey: signer.pk,
@@ -192,7 +197,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
                 return;
               }
               const sentRequest = await signAndPublishEvent({
-                kind: 5,
+                kind: EventDeletion,
                 created_at: currentTime(),
                 content: '',
                 pubkey: signer.pk,
@@ -218,7 +223,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
             if (signer && (!store.onRemove || (await store.onRemove!({ content: context().text.value })).accepted)) {
               const eid = event().id;
               const sentRequest = await signAndPublishEvent({
-                kind: 5,
+                kind: EventDeletion,
                 created_at: currentTime(),
                 content: '',
                 pubkey: signer.pk,
@@ -227,6 +232,30 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               if (sentRequest) {
                 remove('events', [eid]);
               }
+            }
+          };
+
+          const reportEvent = async () => {
+            const s = await getSigner();
+            if (!s) return;
+            const signer = s!;
+            if (!signer) return;
+            const report = store.onReport
+              ? await store.onReport!({})
+              : { accepted: true, list: 'event', type: 'other', reason: '' };
+            if (!report.accepted) return;
+
+            const eid = event().id;
+            const tagPrefix = report.list === 'event' ? ['e', eid] : ['p', event().pk];
+            const sentRequest = await signAndPublishEvent({
+              kind: Report,
+              created_at: currentTime(),
+              content: report.reason || '',
+              pubkey: signer.pk,
+              tags: [[...tagPrefix, report.type || 'other']],
+            }, signer);
+            if (sentRequest) {
+              remove('events', [eid]); // TODO: subscribe to new reports instead?
             }
           };
 
@@ -251,6 +280,8 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               setCreatedTimeAgo(createdAt());
             }, 60 * 1000);
           });
+
+          const showReportButton = () => store.showReportButton.has(event().id);
 
           const isAnchorMentioned = () => event().a === anchor().value && event().am;
 
@@ -321,6 +352,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
                   </li>
                 </Show>}
                 {writtenByCurrentUser() && <li class="ztr-comment-action-remove" onClick={() => removeEvent()}>{removeSvg()}</li>}
+                {signersStore.active && (currentUserIsModerator() || showReportButton()) && !writtenByCurrentUser() && <li class="ztr-comment-action-report" onClick={() => reportEvent()}>{reportSvg()}</li>}
                 {/* <Show when={!store.disableFeatures!.includes('zaps')}>
                   <li class="ztr-comment-action-zap">
                     {lightningSvg()}
@@ -390,6 +422,7 @@ const downvoteSvg = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 5
 const upvoteSelectedSvg = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M313.4 32.9c26 5.2 42.9 30.5 37.7 56.5l-2.3 11.4c-5.3 26.7-15.1 52.1-28.8 75.2H464c26.5 0 48 21.5 48 48c0 18.5-10.5 34.6-25.9 42.6C497 275.4 504 288.9 504 304c0 23.4-16.8 42.9-38.9 47.1c4.4 7.3 6.9 15.8 6.9 24.9c0 21.3-13.9 39.4-33.1 45.6c.7 3.3 1.1 6.8 1.1 10.4c0 26.5-21.5 48-48 48H294.5c-19 0-37.5-5.6-53.3-16.1l-38.5-25.7C176 420.4 160 390.4 160 358.3V320 272 247.1c0-29.2 13.3-56.7 36-75l7.4-5.9c26.5-21.2 44.6-51 51.2-84.2l2.3-11.4c5.2-26 30.5-42.9 56.5-37.7zM32 192H96c17.7 0 32 14.3 32 32V448c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32V224c0-17.7 14.3-32 32-32z"/></svg>;
 const downvoteSelectedSvg = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path d="M313.4 479.1c26-5.2 42.9-30.5 37.7-56.5l-2.3-11.4c-5.3-26.7-15.1-52.1-28.8-75.2H464c26.5 0 48-21.5 48-48c0-18.5-10.5-34.6-25.9-42.6C497 236.6 504 223.1 504 208c0-23.4-16.8-42.9-38.9-47.1c4.4-7.3 6.9-15.8 6.9-24.9c0-21.3-13.9-39.4-33.1-45.6c.7-3.3 1.1-6.8 1.1-10.4c0-26.5-21.5-48-48-48H294.5c-19 0-37.5 5.6-53.3 16.1L202.7 73.8C176 91.6 160 121.6 160 153.7V192v48 24.9c0 29.2 13.3 56.7 36 75l7.4 5.9c26.5 21.2 44.6 51 51.2 84.2l2.3 11.4c5.2 26 30.5 42.9 56.5 37.7zM32 384H96c17.7 0 32-14.3 32-32V128c0-17.7-14.3-32-32-32H32C14.3 96 0 110.3 0 128V352c0 17.7 14.3 32 32 32z"/></svg>;
 const removeSvg = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M170.5 51.6L151.5 80l145 0-19-28.4c-1.5-2.2-4-3.6-6.7-3.6l-93.7 0c-2.7 0-5.2 1.3-6.7 3.6zm147-26.6L354.2 80 368 80l48 0 8 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-8 0 0 304c0 44.2-35.8 80-80 80l-224 0c-44.2 0-80-35.8-80-80l0-304-8 0c-13.3 0-24-10.7-24-24S10.7 80 24 80l8 0 48 0 13.8 0 36.7-55.1C140.9 9.4 158.4 0 177.1 0l93.7 0c18.7 0 36.2 9.4 46.6 24.9zM80 128l0 304c0 17.7 14.3 32 32 32l224 0c17.7 0 32-14.3 32-32l0-304L80 128zm80 64l0 208c0 8.8-7.2 16-16 16s-16-7.2-16-16l0-208c0-8.8 7.2-16 16-16s16 7.2 16 16zm80 0l0 208c0 8.8-7.2 16-16 16s-16-7.2-16-16l0-208c0-8.8 7.2-16 16-16s16 7.2 16 16zm80 0l0 208c0 8.8-7.2 16-16 16s-16-7.2-16-16l0-208c0-8.8 7.2-16 16-16s16 7.2 16 16z"/></svg>;
+const reportSvg = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M48 24C48 10.7 37.3 0 24 0S0 10.7 0 24L0 64 0 350.5 0 400l0 88c0 13.3 10.7 24 24 24s24-10.7 24-24l0-100 80.3-20.1c41.1-10.3 84.6-5.5 122.5 13.4c44.2 22.1 95.5 24.8 141.7 7.4l34.7-13c12.5-4.7 20.8-16.6 20.8-30l0-279.7c0-23-24.2-38-44.8-27.7l-9.6 4.8c-46.3 23.2-100.8 23.2-147.1 0c-35.1-17.6-75.4-22-113.5-12.5L48 52l0-28zm0 77.5l96.6-24.2c27-6.7 55.5-3.6 80.4 8.8c54.9 27.4 118.7 29.7 175 6.8l0 241.8-24.4 9.1c-33.7 12.6-71.2 10.7-103.4-5.4c-48.2-24.1-103.3-30.1-155.6-17.1L48 338.5l0-237z"/></svg>;
 
 export const ellipsisSvg = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 -200 560 640"><path d="M8 256a56 56 0 1 1 112 0A56 56 0 1 1 8 256zm160 0a56 56 0 1 1 112 0 56 56 0 1 1 -112 0zm216-56a56 56 0 1 1 0 112 56 56 0 1 1 0-112z" /></svg>;
 const upArrow = () => <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path d="M201.4 374.6c12.5 12.5 32.8 12.5 45.3 0l160-160c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0L224 306.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l160 160z"/></svg>;

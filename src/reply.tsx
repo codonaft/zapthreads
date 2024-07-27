@@ -5,6 +5,7 @@ import { UnsignedEvent, Event } from "nostr-tools/core";
 import { EventSigner, signersStore, store } from "./util/stores.ts";
 import { currentTime } from "./util/date-time.ts";
 import { generateSecretKey, getPublicKey, getEventHash, finalizeEvent } from "nostr-tools/pure";
+import { Metadata, ShortTextNote, EventDeletion, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
 import { createAutofocus } from "@solid-primitives/autofocus";
 import { find, save, watch } from "./util/db.ts";
 import { Profile, eventToNoteEvent } from "./util/models.ts";
@@ -90,7 +91,7 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
     if (!content) return;
 
     const unsignedEvent: UnsignedEvent = {
-      kind: 1,
+      kind: ShortTextNote,
       created_at: currentTime(),
       content: content,
       pubkey: signer.pk,

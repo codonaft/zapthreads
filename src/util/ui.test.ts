@@ -1,6 +1,7 @@
 import { UnsignedEvent } from "nostr-tools/pure";
 import { parseContent, parseUrlPrefixes } from "./ui.ts";
 import { createMutable } from "solid-js/store";
+import { ReactiveSet } from "@solid-primitives/set";
 import { PreferencesStore } from "./stores.ts";
 import { eventToNoteEvent } from "./models.ts";
 
@@ -20,6 +21,8 @@ describe("ui utils", () => {
         checkUpdates: true,
       },
       ranks: new Map,
+      showReportButton: new Set,
+      moderators: new ReactiveSet,
       profiles: () => [],
       rootEventIds: [],
       topRootEventIds: new Set,

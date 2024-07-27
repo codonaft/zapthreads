@@ -5,6 +5,7 @@ import { WindowNostr } from "nostr-tools/nip07";
 import { Profile, Eid, Pk } from "./models.ts";
 import { createMutable } from "solid-js/store";
 import { Accessor, Setter } from "solid-js";
+import { ReactiveSet } from "@solid-primitives/set";
 import { Signal } from "./solidjs.ts";
 import { NestedNoteEvent } from "./nest.ts";
 
@@ -27,6 +28,8 @@ export const store = createMutable<PreferencesStore>({
     checkUpdates: true,
   },
   ranks: new Map,
+  showReportButton: new Set,
+  moderators: new ReactiveSet,
 
   filter: {},
   profiles: () => [],
@@ -92,6 +95,7 @@ export type PreferencesStore = {
     checkUpdates: boolean,
   };
   ranks: Map<Eid, number>;
+  showReportButton: Set<Eid>;
 
   filter: Filter;  // derived from anchor prop
   externalAuthor?: string; // prop, mostly used with http anchor type
@@ -100,10 +104,13 @@ export type PreferencesStore = {
   replyPlaceholder?: string,
 
   anchorAuthor?: string;
+  community?: string;
+  moderators: ReactiveSet<Pk>;
   profiles: () => Profile[];
-  onLogin?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin: boolean }>;
-  onEvent?: (event: { kind: number; content: string; client?: string; }) => { sanitizedContent?: string; rank?: number; };
+  onLogin?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin?: boolean }>;
+  onEvent?: (event: { kind: number; content: string; client?: string; }) => { sanitizedContent?: string; rank?: number; showReportButton?: boolean; };
   onRemove?: (event: { content: string; }) => Promise<{ accepted: boolean }>;
+  onReport?: (event: {}) => Promise<{ accepted?: boolean; list?: 'event' | 'pubkey'; type?: 'nudity' | 'malware' | 'profanity' | 'illegal' | 'spam' | 'impersonation' | 'other'; reason?: string; }>;
 };
 
 export type Anchor = { type: 'http' | 'naddr' | 'note' | 'error', value: string; };

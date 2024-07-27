@@ -2,7 +2,7 @@ import { JSX, createComputed, createEffect, createMemo, createSignal, on, onMoun
 import { customElement } from 'solid-element';
 import { createVisibilityObserver } from "@solid-primitives/intersection-observer";
 import style from './styles/index.css?raw';
-import { saveRelayLatestForFilter, updateProfiles, totalChildren, parseUrlPrefixes, parseContent, normalizeURL, errorText } from "./util/ui.ts";
+import { updateProfiles, totalChildren, parseUrlPrefixes, parseContent, normalizeURL, errorText } from "./util/ui.ts";
 import { normalizeURL as nostrNormalizeURL } from "nostr-tools/utils";
 import { fetchRelayInformation, infoExpired, powIsOk, pool, loginIfKnownUser, NOTE_KINDS, CONTENT_KINDS, validateEvent } from "./util/network.ts";
 import { nest } from "./util/nest.ts";
@@ -15,11 +15,12 @@ import { clear as clearCache, find, findAll, save, remove, watchAll, onSaved } f
 import { decode, npubEncode } from "nostr-tools/nip19";
 import { RelayRecord } from "nostr-tools/relay";
 import { Event } from "nostr-tools/core";
+import { Metadata, ShortTextNote, EventDeletion, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
 import { finalizeEvent, getPublicKey, UnsignedEvent  } from "nostr-tools/pure";
 import { Filter } from "nostr-tools/filter";
 import { SubCloser } from "nostr-tools/pool";
 import { AggregateEvent, NoteEvent, eventToNoteEvent, eventToReactionEvent, voteKind, RelayInfo, Eid, Pk, Block } from "./util/models.ts";
-import { updateBlockFilters, loadBlockFilters } from "./util/block-lists.ts";
+import { applyBlock, updateBlockFilters, loadBlockFilters } from "./util/block-lists.ts";
 import { validateAndSetLanguage } from "./util/language.ts";
 
 const ZapThreads = (props: { [key: string]: string; }) => {
@@ -60,6 +61,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     store.minReadPow = minReadPow();
     store.maxWritePow = maxWritePow();
     store.writePowDifficulty = Math.max(store.writePowDifficulty, minReadPow());
+    store.community = props.community;
     validateAndSetLanguage(props.language);
 
     const client = props.client.trim();
@@ -140,7 +142,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     for (const e of remoteRootNoteEvents) {
       if (anchor().type == 'http') {
         // make sure it's an actual anchor and not a random comment with that URL
-        if ((e.k == 1 && e.c.includes('↴')) || e.k == 8812) {
+        if ((e.k == ShortTextNote && e.c.includes('↴')) || e.k == 8812) {
           save('events', e);
         }
       } else {
@@ -214,7 +216,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       return;
     }
 
-    const lastUpdateBlockFilters = await loadBlockFilters();
+    const { communityFilter, lastUpdateBlockFilters } = await loadBlockFilters();
 
     // Ensure clean subs
     sub?.close();
@@ -229,17 +231,17 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     // TODO restore with a specific `since` for aggregates
     // (leaving it like this will fail when re-enabling likes/zaps)
     // if (!store.disableFeatures().includes('likes')) {
-    //   kinds.push(7);
+    //   kinds.push(Reaction);
     // }
     // if (!store.disableFeatures().includes('zaps')) {
-    //   kinds.push(9735);
+    //   kinds.push(Zap);
     // }
 
     console.log(`[zapthreads] subscribing to ${_anchor.value} on`, [..._readRelays]);
 
     const queryNoteRootEvent = !store.anchorAuthor && anchor().type === 'note';
-    const rootEventFilter = queryNoteRootEvent ? [{ ids: [anchor().value], kinds: NOTE_KINDS, limit: 1 }] : [];
-    const request = (url: string) => [url, [...rootEventFilter, { ..._filter, kinds: CONTENT_KINDS }]];
+    const rootEventFilter: Filter[] = queryNoteRootEvent ? [{ ids: [anchor().value], kinds: NOTE_KINDS, limit: 1 }] : [];
+    const request = (url: string) => [url, [...communityFilter, ...rootEventFilter, { ..._filter, kinds: CONTENT_KINDS }]];
 
     const newLikeIds = new Set<string>();
     const newZaps: { [id: string]: string; } = {};
@@ -272,7 +274,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
               } else {
                 remove('events', [e.id]);
               }
-            } else if (e.kind === 7) {
+            } else if (e.kind === Reaction) {
               newLikeIds.add(e.id);
               const reactionEvent = eventToReactionEvent(e, _anchor.value);
               if (voteKind(reactionEvent) !== 0) { // remove this condition if you want to track all reactions
@@ -282,9 +284,15 @@ const ZapThreads = (props: { [key: string]: string; }) => {
                   remove('reactions', [e.id]); // FIXME: may not work after setting "since"
                 }
               }
-            } else if (e.kind === 9735) {
+            } else if (e.kind === Zap) {
               const invoiceTag = e.tags.find(t => t[0] === "bolt11");
               invoiceTag && invoiceTag[1] && (newZaps[e.id] = invoiceTag[1]);
+            } else if (e.kind === CommunityDefinition) {
+              const moderators = e
+                .tags
+                .filter(t => t.length >= 4 && t[0] === 'p' && t[3] === 'moderator')
+                .map(t => t[1]);
+              save('communities', { community: store.community!, moderators, l: currentTime() });
             }
           })()
         },
@@ -297,13 +305,13 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         },
         oneose() {
           (async () => {
-            const likesAggregate: AggregateEvent = await find('aggregates', IDBKeyRange.only([_anchor.value, 7]))
-              ?? { eid: _anchor.value, ids: [], k: 7 };
+            const likesAggregate: AggregateEvent = await find('aggregates', IDBKeyRange.only([_anchor.value, Reaction]))
+              ?? { eid: _anchor.value, ids: [], k: Reaction };
             likesAggregate.ids = [...new Set([...likesAggregate.ids, ...newLikeIds])];
             save('aggregates', likesAggregate);
 
-            const zapsAggregate: AggregateEvent = await find('aggregates', IDBKeyRange.only([_anchor.value, 9735]))
-              ?? { eid: _anchor.value, ids: [], k: 9735, sum: 0 };
+            const zapsAggregate: AggregateEvent = await find('aggregates', IDBKeyRange.only([_anchor.value, Zap]))
+              ?? { eid: _anchor.value, ids: [], k: Zap, sum: 0 };
             zapsAggregate.sum = Object.entries(newZaps).reduce((acc, entry) => {
               if (zapsAggregate.ids.includes(entry[0])) return acc;
               const decoded = bolt11Decode(entry[1]);
@@ -317,9 +325,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
           })();
 
           onSaved(async () => {
-            // Save latest received events for each relay
-            saveRelayLatestForFilter(_anchor, [..._events, ..._reactions]);
-
             await pool.estimateWriteRelayLatencies();
             await updateBlockFilters(lastUpdateBlockFilters);
             await pool.updateRelayInfos();
@@ -372,7 +377,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       const _events = events();
       return nest(_events).filter(e => {
         // remove all highlights without children (we only want those that have comments on them)
-        return !(e.k === 9802 && e.children.length === 0);
+        return !(e.k === Highlights && e.children.length === 0);
       });
     }
     return [];
@@ -447,6 +452,7 @@ export default ZapThreads;
 // when using multiple word attributes
 customElement<ZapThreadsAttributes>('zap-threads', {
   anchor: "",
+  community: "",
   version: "",
   relays: "",
   author: "",
@@ -465,6 +471,7 @@ customElement<ZapThreadsAttributes>('zap-threads', {
     version={props['version'] ?? ''}
     relays={props['relays'] ?? ''}
     author={props['author'] ?? ''}
+    community={props['community'] ?? ''}
     disable={props['disable'] ?? ''}
     urls={props['urls'] ?? ''}
     replyPlaceholder={props['reply-placeholder'] ?? ''}
@@ -478,7 +485,7 @@ customElement<ZapThreadsAttributes>('zap-threads', {
 });
 
 export type ZapThreadsAttributes = {
-  [key in 'anchor' | 'version' | 'relays' | 'author' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'language' | 'client' | 'max-comment-length' | 'min-read-pow' | 'max-write-pow']?: string;
+  [key in 'anchor' | 'version' | 'relays' | 'author' | 'community' | 'disable' | 'urls' | 'reply-placeholder' | 'legacy-url' | 'language' | 'client' | 'max-comment-length' | 'min-read-pow' | 'max-write-pow']?: string;
 } & JSX.HTMLAttributes<HTMLElement>;
 
 ZapThreads.onLogin = function (cb?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin: boolean; }>) {
@@ -493,5 +500,10 @@ ZapThreads.onEvent = function (cb?: (event: { kind: number; content: string; }) 
 
 ZapThreads.onRemove = function (cb?: (event: { content: string; }) => Promise<{ accepted: boolean; }>) {
   store.onRemove = cb;
+  return ZapThreads;
+};
+
+ZapThreads.onReport = function (cb?: (event: {}) => Promise<{ accepted?: boolean; list?: 'event' | 'pubkey'; type?: 'nudity' | 'malware' | 'profanity' | 'illegal' | 'spam' | 'impersonation' | 'other'; reason?: string; }>) {
+  store.onReport = cb;
   return ZapThreads;
 };

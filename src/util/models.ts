@@ -71,8 +71,7 @@ export type Session = {
 };
 
 export type Relay = {
-  n: string; // name
-  a: string; // anchor
+  key: string;
   l: number; // latest result
 };
 
@@ -100,6 +99,12 @@ export type Block = {
   reason?: string;
 };
 
+export type Community = {
+  community: string;
+  moderators: Pk[];
+  l: number;
+};
+
 // DB schema
 
 export interface ZapthreadsSchema extends DBSchema {
@@ -107,6 +112,7 @@ export interface ZapthreadsSchema extends DBSchema {
     key: string;
     value: NoteEvent;
     indexes: {
+      'pk': string;
       'a': string;
       'ro': string;
       'r': string;
@@ -140,7 +146,7 @@ export interface ZapthreadsSchema extends DBSchema {
     };
   };
   relays: {
-    key: string[];
+    key: string;
     value: Relay;
     indexes: {
       'a': string;
@@ -165,6 +171,10 @@ export interface ZapthreadsSchema extends DBSchema {
     key: string;
     value: Block;
   };
+  communities: {
+    key: string;
+    value: Community;
+  };
 }
 
 export const indices: { [key in StoreNames<ZapthreadsSchema>]: any } = {
@@ -173,11 +183,12 @@ export const indices: { [key in StoreNames<ZapthreadsSchema>]: any } = {
   'aggregates': ['eid', 'k'],
   'profiles': ['pk'],
   'sessions': 'pk',
-  'relays': ['n', 'a'],
+  'relays': 'key',
   'relayInfos': 'name',
   'relayStats': ['name', 'kind', 'serial'],
   'eventsBlocked': 'id',
   'pubkeysBlocked': 'id',
+  'communities': 'community',
 };
 
 export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion: number) => {
@@ -187,6 +198,7 @@ export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion
   }
 
   const events = db.createObjectStore('events', { keyPath: indices['events'] });
+  events.createIndex('pk', 'pk');
   events.createIndex('a', 'a');
   events.createIndex('ro', 'ro');
   events.createIndex('r', 'r');
@@ -205,7 +217,6 @@ export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion
   sessions.createIndex('autoLogin', 'autoLogin');
 
   const relays = db.createObjectStore('relays', { keyPath: indices['relays'] });
-  relays.createIndex('a', 'a');
 
   const relayInfos = db.createObjectStore('relayInfos', { keyPath: indices['relayInfos'] });
 
@@ -215,6 +226,8 @@ export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion
   const pubkeysBlocked = db.createObjectStore('pubkeysBlocked', { keyPath: indices['pubkeysBlocked'] });
 
   const eventsBlocked = db.createObjectStore('eventsBlocked', { keyPath: indices['eventsBlocked'] });
+
+  const communities = db.createObjectStore('communities', { keyPath: indices['communities'] });
 };
 
 // util

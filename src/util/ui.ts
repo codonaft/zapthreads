@@ -3,6 +3,7 @@ import { Anchor, UrlPrefixesKeys, PreferencesStore } from "./stores.ts";
 import { decode } from "nostr-tools/nip19";
 import { Filter } from "nostr-tools/filter";
 import { Event } from "nostr-tools/core";
+import { ShortTextNote, Metadata, Highlights, Reaction, Zap, Report, CommunityDefinition } from "nostr-tools/kinds";
 import { matchAll, replaceAll } from "nostr-tools/nip27";
 import { Remarkable } from 'remarkable';
 import { findAll, save } from "./db.ts";
@@ -14,7 +15,7 @@ import { currentTime } from "./date-time.ts";
 // Misc profile helpers
 
 export const updateProfiles = async (pubkeys: Set<Pk>, relays: string[], profiles: Profile[]): Promise<void> => {
-  const kind = 0;
+  const kind = Metadata;
   const now = +new Date;
   const sixHours = 21600000;
 
@@ -75,62 +76,15 @@ export const updateProfiles = async (pubkeys: Set<Pk>, relays: string[], profile
   update(slowRelays);
 };
 
-export const getRelayLatest = async (anchor: Anchor) => {
-  const relaysForAnchor = await findAll('relays', anchor.value, { index: 'a' });
-  const hour = 3600;
-  const now = currentTime();
-  return Object.fromEntries(relaysForAnchor.map(r => {
-    const updatedLongTimeAgo = r.l + hour < now;
-    const since = Math.max(0, updatedLongTimeAgo ? r.l + 1 : r.l - hour); // make sure we don't miss events sent from machines with poor network or poor time sync
-    return [r.n, since];
-  }));
-};
-
-// Calculate and save latest created_at to be used as `since`
-// on subsequent relay requests (we use created_at to be a bit safer than with +Date.now)
-// This since only applies to filter queries
-// ({ "#e": store.rootEventIds }, { "#a": [anchor().value] })
-// and not to aggregate or root event queries
-export const saveRelayLatestForFilter = async (anchor: Anchor, events: (NoteEvent | ReactionEvent)[]) => {
-  if (anchor.type !== 'http' && !store.anchorAuthor) return;
-
-  const obj: { [url: string]: number; } = {};
-  for (const e of events) {
-    const relaysForEvent = pool.seenOn.get(e.id);
-    if (relaysForEvent) {
-      for (const relayUrl of relaysForEvent) {
-        if (e.ts > (obj[relayUrl] || 0)) {
-          obj[relayUrl] = e.ts;
-        }
-      }
-    }
-  }
-
-  const relays = await findAll('relays', anchor.value, { index: 'a' });
-  for (const name in obj) {
-    const relay = relays.find(r => r.n === name);
-    if (relay) {
-      if (obj[name] > relay.l) {
-        // update
-        relay.l = obj[name];
-        save('relays', relay);
-      }
-    } else {
-      // create new
-      save('relays', { n: name, a: anchor.value, l: obj[name] });
-    }
-  }
-};
-
 export const encodedEntityToFilter = (entity: string): Filter => {
   const decoded = decode(entity);
   switch (decoded.type) {
     case 'nevent': return {
-      'kinds': [1],
+      'kinds': [ShortTextNote],
       'ids': [decoded.data.id]
     };
     case 'note': return {
-      'kinds': [1],
+      'kinds': [ShortTextNote],
       'ids': [decoded.data]
     };
     case 'naddr': return {
