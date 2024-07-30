@@ -253,36 +253,20 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       {
         onevent(e) {
           (async () => {
-            let noteEvent;
-            let valid = true;
-            try {
-              noteEvent = validateEvent(e, minReadPow()).noteEvent;
-            } catch (err) {
-              console.info(`[zapthreads] ${e.id} ${errorText(err)}`);
-              valid = false;
-            }
-
-            if (noteEvent) {
+            if (NOTE_KINDS.includes(e.kind)) {
+              const noteEvent = eventToNoteEvent(e);
               const isNoteRootEvent = queryNoteRootEvent && !store.anchorAuthor && e.id === anchor().value;
-              if (isNoteRootEvent || valid) {
-                if (isNoteRootEvent) {
-                  console.log(`[zapthreads] anchor author is ${e.pubkey}`);
-                  store.anchorAuthor = e.pubkey;
-                }
-                save('events', noteEvent);
-                newPks.add(e.pubkey);
-              } else {
-                remove('events', [e.id]);
+              if (isNoteRootEvent) {
+                console.log(`[zapthreads] anchor author is ${e.pubkey}`);
+                store.anchorAuthor = e.pubkey;
               }
+              save('events', noteEvent);
+              newPks.add(e.pubkey);
             } else if (e.kind === Reaction) {
               newLikeIds.add(e.id);
               const reactionEvent = eventToReactionEvent(e, _anchor.value);
               if (voteKind(reactionEvent) !== 0) { // remove this condition if you want to track all reactions
-                if (valid) {
-                  save('reactions', reactionEvent);
-                } else {
-                  remove('reactions', [e.id]); // FIXME: may not work after setting "since"
-                }
+                save('reactions', reactionEvent);
               }
             } else if (e.kind === Zap) {
               const invoiceTag = e.tags.find(t => t[0] === "bolt11");

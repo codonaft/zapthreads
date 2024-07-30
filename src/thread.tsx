@@ -1,4 +1,4 @@
-import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on } from "solid-js";
+import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on, onMount } from "solid-js";
 import { defaultPicture, parseContent, shortenEncodedId, svgWidth, totalChildren, errorText } from "./util/ui.ts";
 import { DAY_IN_SECS, WEEK_IN_SECS, currentTime, sortByDate, timeAgo } from "./util/date-time.ts";
 import { signAndPublishEvent, manualLogin, validateNoteEvent } from "./util/network.ts";
@@ -32,28 +32,27 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
     const rankedEvents = [];
     const invalidEvents: Eid[] = [];
     for (const e of events) {
-      let rank = store.ranks.get(e.id)
-      if (rank === undefined) {
-        try {
-          // computing most recent rank and validation result
-          const validationResult = validateNoteEvent(e);
-
-          rank = validationResult.rank || 0;
-          store.ranks.set(e.id, rank);
-
-          if (validationResult.showReportButton === true) {
-            store.showReportButton.add(e.id);
-          }
-        } catch (err) {
-          applyBlock('eventsBlocked', e.id, errorText(err));
-          invalidEvents.push(e.id);
+      let rank;
+      try {
+        const validationResult = validateNoteEvent({ e, minReadPow: store.minReadPow, replies: totalChildren(e) }); // TODO
+        rank = store.ranks.get(e.id);
+        if (rank === undefined) {
+          rank = validationResult.rank;
         }
+
+        if (validationResult.showReportButton === true) {
+          store.showReportButton.add(e.id);
+        }
+      } catch (err) {
+        applyBlock('eventsBlocked', e.id, errorText(err));
+        invalidEvents.push(e.id);
       }
+
       if (rank !== undefined) {
         rankedEvents.push({ rank, e });
+        store.ranks.set(e.id, rank); // avoid further sudden comment movements
       }
     }
-    remove('events', invalidEvents);
     return rankedEvents;
   };
 
@@ -81,6 +80,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               return result!;
             } else {
               const [threadCollapsed, setThreadCollapsed] = createSignal<boolean | undefined>();
+              const parsedContent = parseContent(event(), store, articles());
               const commentContext = {
                 thread: {
                   collapsed: threadCollapsed,
@@ -88,7 +88,8 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
                   trigger: () => setThreadCollapsed(!threadCollapsed()),
                 },
                 text: {
-                  value: parseContent(event(), store, articles()),
+                  value: parsedContent,
+                  overflowed: newSignal(parsedContent.length >= 330),
                   collapsed: newSignal(true),
                 },
                 reply: {
@@ -109,8 +110,15 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
             }
           }));
 
-          const MAX_LENGTH = 255;
-          const overflowed = () => context().text.value.length > MAX_LENGTH;
+          const [ref, setRef] = createSignal<HTMLElement>();
+          createEffect(on([ref], () => {
+            const style = getComputedStyle(ref()!);
+            const emInPixels = parseFloat(style.fontSize);
+            const maxHeight = parseFloat(style.maxHeight) || (5 * 1.5 * emInPixels); // TODO: use .ztr-comment-text-fade.max-height
+            const height = parseFloat(style.height) || 0;
+            context().text.overflowed(height >= maxHeight);
+          }));
+          const overflowed = () => context().text.overflowed();
 
           createEffect(on([userObservedComments, tooLongCommentsSection], () => {
             const thread = context().thread;
@@ -330,13 +338,14 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               {isDifferentVersion() && <div class="ztr-comment-text"><p class="warning">{warningSvg()}<span>Article contents changed since this {action()} was made</span></p></div>}
 
               <div
+                ref={setRef}
                 classList={{ "ztr-comment-text": true, "ztr-comment-text-fade": overflowed() && context().text.collapsed(), "highlight": event().k == 9802 }}
                 innerHTML={context().text.value}>
               </div>
 
               {overflowed() &&
                 <div class="ztr-comment-expand" onClick={() => trigger(context().text.collapsed)}>
-                  <span>{!context().text.collapsed() ? 'Show less' : 'Read more'}</span>
+                  <span>{context().text.collapsed() ? 'Read more' : 'Show less'}</span>
                 </div>}
 
               <ul class="ztr-comment-actions">

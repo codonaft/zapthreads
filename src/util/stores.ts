@@ -64,6 +64,7 @@ export type CommentContext = {
   },
   text: {
     value: string;
+    overflowed: Signal<boolean>;
     collapsed: Signal<boolean>;
   },
   reply: {
@@ -94,7 +95,7 @@ export type PreferencesStore = {
     pubkeys: Set<Pk>;
     checkUpdates: boolean,
   };
-  ranks: Map<Eid, number>;
+  ranks: Map<Eid, number>,
   showReportButton: Set<Eid>;
 
   filter: Filter;  // derived from anchor prop
@@ -108,7 +109,7 @@ export type PreferencesStore = {
   moderators: ReactiveSet<Pk>;
   profiles: () => Profile[];
   onLogin?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin?: boolean }>;
-  onEvent?: (event: { kind: number; content: string; client?: string; }) => { sanitizedContent?: string; rank?: number; showReportButton?: boolean; };
+  onEvent?: (event: { kind: number; content: string; replies: number; client?: string; }) => { sanitizedContent?: string; rank?: number; showReportButton?: boolean; };
   onRemove?: (event: { content: string; }) => Promise<{ accepted: boolean }>;
   onReport?: (event: {}) => Promise<{ accepted?: boolean; list?: 'event' | 'pubkey'; type?: 'nudity' | 'malware' | 'profanity' | 'illegal' | 'spam' | 'impersonation' | 'other'; reason?: string; }>;
 };

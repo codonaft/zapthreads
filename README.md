@@ -136,7 +136,7 @@ ZapThreads
   .onReport(async ({}) => {
     return { accepted: true, list: 'event', type: 'other', reason: '' };
   })
-  .onEvent(({ kind, content, client }) => {
+  .onEvent(({ kind, content, replies, client }) => {
     if (kind === 1 && content.includes('poker')) {
       throw new Error("No spamming please, we're discussing important things here");
     }
