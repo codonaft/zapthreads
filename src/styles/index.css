@@ -298,11 +298,19 @@ ul.ztr-comment-actions li {
 li.ztr-comment-action-upvote {
   margin-left: 0.5em;
   margin-right: 0.5em;
+  span {
+    margin-left: 0.075em;
+    font-size: 0.85em;
+  }
 }
 
 li.ztr-comment-action-downvote {
   margin-left: 0.5em;
   margin-right: 0.5em;
+  span {
+    margin-left: 0.075em;
+    font-size: 0.85em;
+  }
 }
 
 li.ztr-comment-action-reply {

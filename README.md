@@ -64,6 +64,7 @@ Arguments:
  - `disable`: comma-separated string of features to disable, all enabled by default
    - `likes`
    - `votes`
+   - `singleVoteCounter`
    - `zaps`
    - `reply` (when disabled the component becomes read-only)
    - `publish` (when disabled does not send event to relays, useful for testing)
@@ -136,11 +137,11 @@ ZapThreads
   .onReport(async ({}) => {
     return { accepted: true, list: 'event', type: 'other', reason: '' };
   })
-  .onEvent(({ kind, content, replies, client }) => {
+  .onEvent(({ kind, content, replies, upvotes, downvotes, client }) => {
     if (kind === 1 && content.includes('poker')) {
       throw new Error("No spamming please, we're discussing important things here");
     }
-    const rank = content.length > 1000 ? -1 : 0;
+    const rank = (content.length > 1000 ? -1 : 0) + (upvotes + downvotes) * 100;
     return { sanitizedContent: content.replaceAll('perkele', 'mind-blowing'), rank, showReportButton: rank < 0 };
   })
 ```

@@ -28,16 +28,49 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
   const firstLevelComments = () => props.firstLevelComments ? props.firstLevelComments() : 0;
   const userObservedComments = () => store.userObservedComments;
 
+  const commentContext = (event: NestedNoteEvent) => {
+    const result = store.commentContexts.get(event.id);
+    if (result) {
+      return result!;
+    } else {
+      const [threadCollapsed, setThreadCollapsed] = createSignal<boolean | undefined>();
+      const parsedContent = parseContent(event, store, articles());
+      const commentContext = {
+        thread: {
+          collapsed: threadCollapsed,
+          setCollapsed: setThreadCollapsed,
+          trigger: () => setThreadCollapsed(!threadCollapsed()),
+        },
+        text: {
+          value: parsedContent,
+          overflowed: newSignal(parsedContent.length >= 330),
+          collapsed: newSignal(true),
+        },
+        votes: {
+          upvotesCount: newSignal(0),
+          downvotesCount: newSignal(0),
+        },
+        reply: {
+          text: newSignal(''),
+          isOpen: newSignal(false),
+        },
+      };
+      store.commentContexts.set(event.id, commentContext);
+      return commentContext;
+    }
+  };
+
   const validateAndRank = (events: NestedNoteEvent[]) => {
     const rankedEvents = [];
     const invalidEvents: Eid[] = [];
     for (const e of events) {
       let rank;
       try {
-        const validationResult = validateNoteEvent({ e, minReadPow: store.minReadPow, replies: totalChildren(e) }); // TODO
+        const { upvotesCount, downvotesCount } = commentContext(e).votes;
+        const validationResult = validateNoteEvent({ e, minReadPow: store.minReadPow, replies: totalChildren(e), upvotes: upvotesCount(), downvotes: downvotesCount() }); // TODO: move reply calculation into the function?
         rank = store.ranks.get(e.id);
         if (rank === undefined) {
-          rank = validationResult.rank;
+          rank = props.firstLevelComments ? validationResult.rank : 0; // TODO: split validate and rank?
         }
 
         if (validationResult.showReportButton === true) {
@@ -73,34 +106,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
           const tooLongCommentsSection = () => firstLevelComments() >= MIN_AUTO_COLLAPSED_THREADS || total() >= MIN_AUTO_COLLAPSED_COMMENTS;
           const writtenByCurrentUser = () => event().pk === signersStore.active?.pk;
           const currentUserIsModerator = () => signersStore.active && store.moderators.has(signersStore.active!.pk);
-
-          const context: () => CommentContext = () => {
-            const result = store.commentContexts.get(event().id);
-            if (result) {
-              return result!;
-            } else {
-              const [threadCollapsed, setThreadCollapsed] = createSignal<boolean | undefined>();
-              const parsedContent = parseContent(event(), store, articles());
-              const commentContext = {
-                thread: {
-                  collapsed: threadCollapsed,
-                  setCollapsed: setThreadCollapsed,
-                  trigger: () => setThreadCollapsed(!threadCollapsed()),
-                },
-                text: {
-                  value: parsedContent,
-                  overflowed: newSignal(parsedContent.length >= 330),
-                  collapsed: newSignal(true),
-                },
-                reply: {
-                  text: newSignal(''),
-                  isOpen: newSignal(false),
-                }
-              };
-              store.commentContexts.set(event().id, commentContext);
-              return commentContext;
-            }
-          };
+          const context = () => commentContext(event());
 
           createEffect(on([articles], () => {
             if (store.commentContexts.has(event().id)) {
@@ -130,7 +136,6 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
             }
           }));
 
-          const votesCount = newSignal(0);
           const hasVotes = newSignal(false);
           const currentUserVote = newSignal(0);
           const currentNoteVotes = () => props.votes().filter(r => r.noteId === event().id);
@@ -156,10 +161,15 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               const votes = currentNoteVotesDeduplicatedByPks();
               hasVotes(votes.length > 0);
 
-              const newVoteCount = votes
-                .map(r => voteKind(r) as number)
+              const upvotes = votes
+                .map(r => +(voteKind(r) === 1))
                 .reduce((sum, i) => sum + i, 0);
-              votesCount(newVoteCount);
+              const downvotes = votes
+                .map(r => +(voteKind(r) === -1))
+                .reduce((sum, i) => sum + i, 0);
+              const { upvotesCount, downvotesCount } = context().votes;
+              upvotesCount(upvotes);
+              downvotesCount(downvotes);
 
               const signer = signersStore.active;
               const kind: VoteKind = (signer && votes.filter(r => r.pk === signer!.pk).map(r => voteKind(r))[0]) || 0;
@@ -352,12 +362,20 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
                 {<Show when={!store.disableFeatures!.includes('votes')}>
                   <li class="ztr-comment-action-upvote" classList={{selected: currentUserVote() === 1}} onClick={() => toggleVote(1)}>
                     {currentUserVote() === 1 ? upvoteSelectedSvg() : upvoteSvg()}
+                    <Show when={store.disableFeatures!.includes('singleVoteCounter') && hasVotes()}>
+                      <span>{context().votes.upvotesCount()}</span>
+                    </Show>
                   </li>
-                  <li class="ztr-comment-action-votes">
-                    <span>{hasVotes() ? votesCount() : 'Vote'}</span>
-                  </li>
+                  <Show when={!store.disableFeatures!.includes('singleVoteCounter') || !hasVotes()}>
+                    <li class="ztr-comment-action-votes">
+                      <span>{hasVotes() ? (context().votes.upvotesCount() - context().votes.downvotesCount()) : 'Vote'}</span>
+                    </li>
+                  </Show>
                   <li class="ztr-comment-action-downvote" classList={{selected: currentUserVote() === -1}} onClick={() => toggleVote(-1)}>
                     {currentUserVote() === -1 ? downvoteSelectedSvg() : downvoteSvg()}
+                    <Show when={store.disableFeatures!.includes('singleVoteCounter') && hasVotes()}>
+                      <span>{context().votes.downvotesCount()}</span>
+                    </Show>
                   </li>
                 </Show>}
                 {writtenByCurrentUser() && <li class="ztr-comment-action-remove" onClick={() => removeEvent()}>{removeSvg()}</li>}

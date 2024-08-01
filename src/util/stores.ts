@@ -50,7 +50,7 @@ export type EventSigner = {
 
 export type UrlPrefixesKeys = 'naddr' | 'nevent' | 'note' | 'npub' | 'nprofile' | 'tag';
 
-const _types = ['reply', 'likes', 'votes', 'zaps', 'publish', 'watch', 'replyAnonymously', 'hideContent', 'relayInformation', 'spamNostrBand'] as const;
+const _types = ['reply', 'likes', 'votes', 'singleVoteCounter', 'zaps', 'publish', 'watch', 'replyAnonymously', 'hideContent', 'relayInformation', 'spamNostrBand'] as const;
 type DisableType = typeof _types[number];
 export const isDisableType = (type: string): type is DisableType => {
   return _types.includes(type as DisableType);
@@ -66,6 +66,10 @@ export type CommentContext = {
     value: string;
     overflowed: Signal<boolean>;
     collapsed: Signal<boolean>;
+  },
+  votes: {
+    upvotesCount: Signal<number>;
+    downvotesCount: Signal<number>;
   },
   reply: {
     text: Signal<string>;
@@ -109,7 +113,7 @@ export type PreferencesStore = {
   moderators: ReactiveSet<Pk>;
   profiles: () => Profile[];
   onLogin?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin?: boolean }>;
-  onEvent?: (event: { kind: number; content: string; replies: number; client?: string; }) => { sanitizedContent?: string; rank?: number; showReportButton?: boolean; };
+  onEvent?: (event: { kind: number; content: string; replies: number; upvotes: number; downvotes: number; client?: string; }) => { sanitizedContent?: string; rank?: number; showReportButton?: boolean; };
   onRemove?: (event: { content: string; }) => Promise<{ accepted: boolean }>;
   onReport?: (event: {}) => Promise<{ accepted?: boolean; list?: 'event' | 'pubkey'; type?: 'nudity' | 'malware' | 'profanity' | 'illegal' | 'spam' | 'impersonation' | 'other'; reason?: string; }>;
 };
