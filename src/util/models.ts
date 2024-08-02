@@ -2,6 +2,7 @@ import { DBSchema, IDBPDatabase, StoreNames } from "idb";
 import { parse } from "nostr-tools/nip10";
 import { RelayInformation } from "nostr-tools/nip11";
 import { UnsignedEvent } from "nostr-tools/pure";
+import { isValidLanguage } from "./language.ts";
 
 // models
 
@@ -24,6 +25,7 @@ export type NoteEvent = {
   tl?: string; // title
   pow: number;
   client?: string;
+  language?: string;
 };
 
 export type NoteId = string;
@@ -251,6 +253,11 @@ export const eventToNoteEvent = (e: UnsignedEvent & { id?: string; }): NoteEvent
   const nonce = e.tags.find(t => t.length > 2 && t[0] === 'nonce');
   const pow = nonce && +nonce[2] || 0;
   const client = parseClient(e.tags);
+  const language = e
+    .tags
+    .filter(t => t.length >= 3 && t[0] === 'l' && t[2] === 'ISO-639-1')
+    .map(t => t[1].trim())
+    .filter(isValidLanguage)[0];
 
   return {
     id: e.id ?? "",
@@ -270,6 +277,7 @@ export const eventToNoteEvent = (e: UnsignedEvent & { id?: string; }): NoteEvent
     tl,
     pow,
     client,
+    language,
   };
 };
 

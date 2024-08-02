@@ -724,6 +724,7 @@ export const logout = async () => {
   signersStore.active = undefined;
 };
 
+// TODO: rename to validateWriteEvent?
 export const validateEvent = (e: UnsignedEvent & { id: undefined } | Event, minReadPow?: number) => {
   const replies = 0;
   const upvotes = 0;
@@ -735,7 +736,7 @@ export const validateEvent = (e: UnsignedEvent & { id: undefined } | Event, minR
   preValidate({ id: e.id, pubkey: e.pubkey, kind: e.kind, powOrTags: e.tags, content: e.content }, minReadPow);
   const client = parseClient(e.tags);
   const result = store.onEvent
-    ? store.onEvent({ kind: e.kind, content: e.content, client, replies, upvotes, downvotes }) // FIXME: parseContent? nope, it's not note
+    ? store.onEvent({ kind: e.kind, content: e.content, client, replies, upvotes, downvotes, pow: store.writePowDifficulty })
     : { sanitizedContent: e.content, rank: undefined, showReportButton: false };
   return { ...result, noteEvent: undefined };
 };
@@ -744,7 +745,7 @@ export const validateNoteEvent = (args: { e: NoteEvent; minReadPow?: number; rep
   const { e, minReadPow, replies, upvotes, downvotes } = args;
   preValidate({ id: e.id, pubkey: e.pk, kind: e.k, powOrTags: e.pow, content: e.c }, minReadPow);
   const result = store.onEvent
-    ? store.onEvent({ kind: e.k, content: parseContent(e, store), client: e.client, replies, upvotes, downvotes })
+    ? store.onEvent({ kind: e.k, content: parseContent(e, store), replies, upvotes, downvotes, client: e.client, language: e.language, pow: e.pow })
     : { sanitizedContent: e.c, rank: undefined, showReportButton: false }
   return { ...result, noteEvent: e };
 };
