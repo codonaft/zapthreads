@@ -319,7 +319,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
 
           const isAnchorMentioned = () => event().a === anchor().value && event().am;
 
-          const action = () => event().k === 9802 ? 'highlight' : (isAnchorMentioned() ? 'mention' : 'comment');
+          const action = () => event().k === Highlights ? 'highlight' : (isAnchorMentioned() ? 'mention' : 'comment');
 
           const isUnspecifiedVersion = () =>
             // if it does not have a parent or rootId
@@ -365,7 +365,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
 
               <div
                 ref={setRef}
-                classList={{ "ztr-comment-text": true, "ztr-comment-text-fade": overflowed() && context().text.collapsed(), "highlight": event().k == 9802 }}
+                classList={{ "ztr-comment-text": true, "ztr-comment-text-fade": overflowed() && context().text.collapsed(), "highlight": event().k == Highlights }}
                 innerHTML={context().text.value}>
               </div>
 

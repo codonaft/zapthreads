@@ -310,7 +310,7 @@ class PrioritizedPool {
   public async estimateWriteRelayLatencies() {
     const test = async (relayUrl: string) => {
       if (this.relays.get(relayUrl)?.connected) return;
-      const stats = (await findAll('relayStats', relayUrl, { index: 'by-name' }));
+      const stats = (await findAll('relayStats', relayUrl, { index: 'name' }));
       if (stats.length >= STATS_SIZE) return;
       const startTime = Date.now();
       let deltaTime = Infinity;
@@ -404,7 +404,7 @@ class PrioritizedPool {
     const key = filterCacheKey(relayUrl, filter);
     if (this.eventsTs[key] !== undefined) return this.eventsTs[key];
 
-    const relay = await find('relays', IDBKeyRange.only(key));
+    const relay = await find('requestFilters', IDBKeyRange.only(key));
     if (!relay) return 0;
 
     const hour = 3600;
@@ -419,14 +419,14 @@ class PrioritizedPool {
     const key = filterCacheKey(relayUrl, filter);
     const since = Math.max(this.eventsTs[key] || 0, ts);
     this.eventsTs[key] = since;
-    save('relays', { key, l: since });
+    save('requestFilters', { key, l: since });
   }
 }
 
 export const pool = new PrioritizedPool({ verifyEvent, websocketImplementation: undefined });
 
 const addRelayStats = async (relayUrl: string, latency: number, kind: number = -1, overwrite: boolean = false) => {
-  const stats = (await findAll('relayStats', relayUrl, { index: 'by-name' }))
+  const stats = (await findAll('relayStats', relayUrl, { index: 'name' }))
     .filter(stats => stats.kind === kind);
   const lastStat = maxBy(stats, s => s.ts);
   save('relayStats', {
@@ -538,7 +538,7 @@ export const rankRelays = async (relays: string[], options?: { kind?: number; ev
       } catch (_) { }
     }
 
-    const stats = (await findAll('relayStats', relayUrl, { index: 'by-name' }));
+    const stats = (await findAll('relayStats', relayUrl, { index: 'name' }));
     const generalLatency = medianOrZero(stats.map(s => s.latency));
 
     const exactStats = stats.filter(stats => stats.kind === kind);

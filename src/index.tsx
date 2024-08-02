@@ -15,7 +15,7 @@ import { clear as clearCache, find, findAll, save, remove, watchAll, onSaved } f
 import { decode, npubEncode } from "nostr-tools/nip19";
 import { RelayRecord } from "nostr-tools/relay";
 import { Event } from "nostr-tools/core";
-import { Metadata, ShortTextNote, EventDeletion, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
+import { Metadata, ShortTextNote, LongFormArticle, EventDeletion, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
 import { finalizeEvent, getPublicKey, UnsignedEvent  } from "nostr-tools/pure";
 import { Filter } from "nostr-tools/filter";
 import { SubCloser } from "nostr-tools/pool";
@@ -325,7 +325,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     );
   }, { defer: true }));
 
-  const articles = watchAll(() => ['events', 30023, { index: 'k' }]);
+  const articles = watchAll(() => ['events', LongFormArticle, { index: 'k' }]);
 
   const content = createMemo(() => {
     if (store.disableFeatures!.includes('hideContent') && anchor().type === 'naddr') {
