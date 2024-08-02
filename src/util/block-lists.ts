@@ -147,7 +147,6 @@ const loadModerators = async () => {
     community.moderators.forEach(pk => store.moderators.add(pk));
   }
 
-  console.log('loadModerators', store.moderators.size, [...store.moderators]);
   return lastUpdate;
 };
 
@@ -165,7 +164,6 @@ const processReport = (e: Event) => {
   const reportedPks = e.tags.filter(t => t.length >= 2 && t[0] === 'p').map(t => t[1]);
   const expectedReportedPks = reportedPks.length > 0 && reportedPks.filter(pk => store.moderators.has(pk)).length === 0;
   if (!expectedReportedPks) return;
-  console.log('processReport', e);
 
   const reportedEvents = e.tags.filter(t => t.length >= 3 && t[0] === 'e');
   if (reportedEvents.length > 0) {

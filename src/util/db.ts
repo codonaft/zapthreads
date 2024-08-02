@@ -22,13 +22,13 @@ const db = async () => {
       __db = await openDB<ZapthreadsSchema>('zapthreads-codonaft', 2, { upgrade });
 
       __db.addEventListener('close', (event) => {
-        console.log('closed database');
+        console.log('[zapthreads] closed database');
         _enabledDatabase = false;
       }, {'once': true});
 
       window.addEventListener('storage', (event) => {
         if (event.key === null) {
-          console.log('cleared storage');
+          console.log('[zapthreads] cleared storage');
           _enabledDatabase = false;
         }
       }, {'once': true});

@@ -121,7 +121,7 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
     if (props.replyTo) {
       const replyEvent = await find('events', IDBKeyRange.only(props.replyTo));
       if (replyEvent) {
-        console.log('publishing reply');
+        console.log('[zapthreads] publishing reply');
         // If it is a reply, it must have a root
         unsignedEvent.tags.push(['e', replyEvent.ro!, '', 'root']);
         // If the user is not replying to themselves, add p to notify

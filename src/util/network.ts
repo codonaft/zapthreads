@@ -606,7 +606,6 @@ export const shortFetch = (url: string, options?: any) => fetch(url, {
   signal: AbortSignal.timeout(SHORT_TIMEOUT),
 });
 
-// TODO: move
 export const sign = async (unsignedEvent: UnsignedEvent, signer: EventSigner) => {
   if (store.client && unsignedEvent.tags.filter(tag => tag.length > 0 && tag[0] === 'client').length === 0) {
     unsignedEvent.tags.push(['client', store.client]);

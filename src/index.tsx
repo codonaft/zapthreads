@@ -281,7 +281,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
           })()
         },
         oneoseOnRelay(relay) {
-          console.log('oneoseOnRelay', relay);
           newPks = new Set([...newPks].filter(pk => !requestedProfileUpdate.has(pk)));
           newPks.forEach(pk => requestedProfileUpdate.add(pk));
           updateProfiles(newPks, _readRelays, _profiles);
