@@ -144,7 +144,7 @@ ZapThreads
 
     let result = {
       sanitizedContent: content.replaceAll('perkele', 'mind-blowing'),
-      showReportButton: content.includes('banana'),
+      showReportButton: content.includes('https://'),
     };
 
     if (rankable) {

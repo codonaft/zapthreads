@@ -114,6 +114,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
           const total = createMemo(() => totalChildren(event()));
           const tooLongCommentsSection = () => firstLevelComments() >= MIN_AUTO_COLLAPSED_THREADS || total() >= MIN_AUTO_COLLAPSED_COMMENTS;
           const writtenByCurrentUser = () => event().pk === signersStore.active?.pk;
+          const writtenByModerator = () => store.moderators.has(event().pk);
           const currentUserIsModerator = () => signersStore.active && store.moderators.has(signersStore.active!.pk);
           const context = () => commentContext(event());
 
@@ -395,7 +396,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
                   </li>
                 </Show>}
                 {writtenByCurrentUser() && <li class="ztr-comment-action-remove" onClick={() => removeEvent()}>{removeSvg()}</li>}
-                {signersStore.active && (currentUserIsModerator() || showReportButton()) && !writtenByCurrentUser() && <li class="ztr-comment-action-report" onClick={() => reportEvent()}>{reportSvg()}</li>}
+                {signersStore.active && (currentUserIsModerator() || showReportButton()) && !writtenByCurrentUser() && !writtenByModerator() && <li class="ztr-comment-action-report" onClick={() => reportEvent()}>{reportSvg()}</li>}
                 {/* <Show when={!store.disableFeatures!.includes('zaps')}>
                   <li class="ztr-comment-action-zap">
                     {lightningSvg()}

@@ -191,8 +191,8 @@ class PrioritizedPool {
       try {
         relay = await this.ensureRelay(url);
       } catch (err) {
-        const reason = errorText(err);
-        console.log(`[zapthreads] ${url} closed with "${reason}"`);
+        const reason = errorText(err) || '';
+        console.log(`[zapthreads] ${url} closed ${reason}`);
         handleClose(i, url, reason);
         return;
       }

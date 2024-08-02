@@ -8,8 +8,6 @@ import { find, findAll, save, remove } from "./db.ts";
 import { HOUR_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, currentTime } from "./date-time.ts";
 import { shortFetch } from "./network.ts";
 
-const disabledSpamNostrBand = () => store.disableFeatures!.includes('spamNostrBand');
-
 export const applyBlock = async (list: BlockName, id: Eid | Pk, reason?: string) => {
   const block = await find(list, IDBKeyRange.only(id)) || { id, addedAt: currentTime(), used: false };
   if (!block.used) {
@@ -44,7 +42,7 @@ export const applyBlock = async (list: BlockName, id: Eid | Pk, reason?: string)
 };
 
 export const loadBlockFilters = async () => {
-  const lastUpdate = Math.max(await loadModerators(), await loadSpamNostrBand());
+  const lastUpdate = Math.max(await loadModerators(), await loadBlocked());
 
   const now = currentTime();
   const deadline = lastUpdate + DAY_IN_SECS;
@@ -70,9 +68,7 @@ export const updateBlockFilters = async (lastUpdateBlockFilters: number) => {
   console.log('[zapthreads] updated block-lists');
 };
 
-const loadSpamNostrBand = async () => {
-  if (disabledSpamNostrBand()) return 0;
-
+const loadBlocked = async () => {
   const now = currentTime();
   const lists: BlockName[] = ['eventsBlocked', 'pubkeysBlocked'];
   const lastUpdate = Math.max(...await Promise.all(lists.map(
@@ -100,7 +96,7 @@ const loadSpamNostrBand = async () => {
 };
 
 const updateSpamNostrBand = async (lastUpdateBlockFilters: number) => {
-  if (disabledSpamNostrBand()) return;
+  if (store.disableFeatures!.includes('spamNostrBand')) return;
 
   const now = currentTime();
   const deadline = lastUpdateBlockFilters + DAY_IN_SECS;

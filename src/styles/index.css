@@ -126,6 +126,7 @@ ul.ztr-comment-info-items li a small {
   word-break: break-word;
   overflow: hidden;
   max-width: 37em;
+  min-width: 12em;
 }
 
 .ztr-comment-text-fade {
@@ -402,6 +403,7 @@ li.ztr-comment-action-votes {
   border: 1px solid #BBB;
   outline: none;
   width: calc(100% - 1.5em);
+  min-width: 12em;
   padding: 0.7em;
   margin: 0.5em 0;
   height: 4em;
@@ -441,6 +443,7 @@ li.ztr-comment-action-votes {
   font-family: var(--ztr-font);
   appearance: none;
   padding: 0.5em 1.4em;
+  min-width: 8em;
   min-height: 3em;
   border-radius: 1.4rem;
   font-size: 0.95em;
