@@ -1,7 +1,7 @@
 import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on, onMount } from "solid-js";
 import { defaultPicture, parseContent, shortenEncodedId, svgWidth, totalChildren, errorText } from "./util/ui.ts";
 import { DAY_IN_SECS, WEEK_IN_SECS, currentTime, sortByDate, timeAgo } from "./util/date-time.ts";
-import { signAndPublishEvent, manualLogin, validateNoteEvent } from "./util/network.ts";
+import { signAndPublishEvent, manualLogin, validateNestedNoteEvent } from "./util/network.ts";
 import { ReplyEditor } from "./reply.tsx";
 import { NestedNoteEvent } from "./util/nest.ts";
 import { noteEncode, npubEncode } from "nostr-tools/nip19";
@@ -69,11 +69,10 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
       let valid = false;
       try {
         const { upvotesCount, downvotesCount } = commentContext(e).votes;
-        const validationResult = validateNoteEvent({
+        const validationResult = validateNestedNoteEvent({
           e,
           rankable,
           minReadPow: store.minReadPow,
-          replies: totalChildren(e), // TODO: move into the function?
           upvotes: upvotesCount(),
           downvotes: downvotesCount(),
         });

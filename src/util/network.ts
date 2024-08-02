@@ -13,9 +13,10 @@ import { npubEncode } from "nostr-tools/nip19";
 import { find, findAll, save, onSaved, remove } from "./db.ts";
 import { EventSigner, store, signersStore } from "./stores.ts";
 import { Eid, RelayInfo, RelayStats, Pk, eventToNoteEvent, NoteEvent, parseClient } from "./models.ts";
+import { NestedNoteEvent } from "./nest.ts";
 import { medianOrZero, maxBy } from "./collections.ts";
 import { currentTime, MIN_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, SIX_HOURS_IN_SECS } from "./date-time.ts";
-import { errorText, parseContent } from "./ui.ts";
+import { errorText, parseContent, totalChildren } from "./ui.ts";
 import { updateBlockFilters, loadBlockFilters, applyBlock } from "./block-lists.ts";
 import { waitNostr } from "nip07-awaiter";
 import { sha256 } from "@noble/hashes/sha256";
@@ -724,26 +725,33 @@ export const logout = async () => {
   signersStore.active = undefined;
 };
 
-// TODO: rename to validateWriteEvent?
-export const validateEvent = (e: UnsignedEvent & { id: undefined } | Event, minReadPow?: number) => {
-  const replies = 0;
+export const validateWriteEvent = (e: UnsignedEvent & { id: undefined } | Event, minReadPow?: number) => {
   const upvotes = 0;
   const downvotes = 0;
   const rankable = false;
   if (NOTE_KINDS.includes(e.kind)) {
-    return validateNoteEvent({ e: eventToNoteEvent(e), rankable, minReadPow, replies, upvotes, downvotes });
+    return validateNestedNoteEvent({ e: { ...eventToNoteEvent(e), children: [] }, rankable, minReadPow, upvotes, downvotes });
   };
 
   preValidate({ id: e.id, pubkey: e.pubkey, kind: e.kind, powOrTags: e.tags, content: e.content }, minReadPow);
-  const client = parseClient(e.tags);
   const result = store.onEvent
-    ? store.onEvent({ rankable, kind: e.kind, content: e.content, client, replies, upvotes, downvotes, pow: store.writePowDifficulty })
+    ? store.onEvent({
+      rankable,
+      kind: e.kind,
+      content: e.content,
+      client: parseClient(e.tags),
+      replies: 0,
+      upvotes,
+      downvotes,
+      pow: store.writePowDifficulty
+    })
     : { sanitizedContent: e.content, rank: undefined, showReportButton: false };
   return { ...result, noteEvent: undefined };
 };
 
-export const validateNoteEvent = (args: { e: NoteEvent; rankable: boolean; minReadPow?: number; replies: number; upvotes: number; downvotes: number; }) => {
-  const { e, rankable, minReadPow, replies, upvotes, downvotes } = args;
+export const validateNestedNoteEvent = (args: { e: NestedNoteEvent; rankable: boolean; minReadPow?: number; upvotes: number; downvotes: number; }) => {
+  const { e, rankable, minReadPow, upvotes, downvotes } = args;
+  const replies = totalChildren(e);
   preValidate({ id: e.id, pubkey: e.pk, kind: e.k, powOrTags: e.pow, content: e.c }, minReadPow);
   const result = store.onEvent
     ? store.onEvent({ rankable, kind: e.k, content: parseContent(e, store), replies, upvotes, downvotes, client: e.client, language: e.language, pow: e.pow })

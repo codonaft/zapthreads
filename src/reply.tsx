@@ -1,5 +1,5 @@
 import { defaultPicture, generateTags, satsAbbrev, shortenEncodedId, updateProfiles, errorText } from "./util/ui.ts";
-import { signAndPublishEvent, sign, pool, manualLogin, logout, validateEvent } from "./util/network.ts";
+import { signAndPublishEvent, sign, pool, manualLogin, logout, validateWriteEvent } from "./util/network.ts";
 import { Show, createEffect, createSignal } from "solid-js";
 import { UnsignedEvent, Event } from "nostr-tools/core";
 import { EventSigner, signersStore, store } from "./util/stores.ts";
@@ -99,7 +99,7 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
     };
 
     try {
-      validateEvent({ ...unsignedEvent, id: undefined });
+      validateWriteEvent({ ...unsignedEvent, id: undefined });
     } catch (e) {
       onError(errorText(e));
       return;

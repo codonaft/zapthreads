@@ -4,7 +4,7 @@ import { createVisibilityObserver } from "@solid-primitives/intersection-observe
 import style from './styles/index.css?raw';
 import { updateProfiles, totalChildren, parseUrlPrefixes, parseContent, normalizeURL, errorText } from "./util/ui.ts";
 import { normalizeURL as nostrNormalizeURL } from "nostr-tools/utils";
-import { fetchRelayInformation, infoExpired, powIsOk, pool, loginIfKnownUser, NOTE_KINDS, CONTENT_KINDS, validateEvent } from "./util/network.ts";
+import { fetchRelayInformation, infoExpired, powIsOk, pool, loginIfKnownUser, NOTE_KINDS, CONTENT_KINDS, validateWriteEvent } from "./util/network.ts";
 import { nest } from "./util/nest.ts";
 import { store, isDisableType, signersStore } from "./util/stores.ts";
 import { HOUR_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, sortByDate, currentTime } from "./util/date-time.ts";
