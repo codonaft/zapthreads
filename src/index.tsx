@@ -110,7 +110,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         localRootEvents = await findAll('events', anchor().value, { index: 'r' });
         store.rootEventIds = sortByDate(localRootEvents).map(e => e.id);
         const rf = props.legacyUrl ? [anchor().value] : [anchor().value, `${anchor().value}/`];
-        filterForRemoteRootEvents = { '#r': rf, kinds: [1, 8812] };
+        filterForRemoteRootEvents = { '#r': rf, kinds: [ShortTextNote, 8812] };
         break;
       case 'note':
         // In the case of note we only have one possible anchor, so return if found
@@ -232,7 +232,16 @@ const ZapThreads = (props: { [key: string]: string; }) => {
 
     const queryNoteRootEvent = !store.anchorAuthor && anchor().type === 'note';
     const rootEventFilter: Filter[] = queryNoteRootEvent ? [{ ids: [anchor().value], kinds: NOTE_KINDS, limit: 1 }] : [];
-    const request = (url: string) => [url, [...communityFilter, ...rootEventFilter, { ..._filter, kinds: CONTENT_KINDS }]];
+
+    const reactionsDisabled = store.disableFeatures!.includes('votes') && store.disableFeatures!.includes('likes');
+    const zapsDisabled = store.disableFeatures!.includes('zaps');
+    const kinds = CONTENT_KINDS.filter(k => {
+      let result = true;
+      if (reactionsDisabled) result &&= k !== Reaction;
+      if (zapsDisabled) result &&= k !== Zap;
+      return result;
+    });
+    const request = (url: string) => [url, [...communityFilter, ...rootEventFilter, { ..._filter, kinds }]];
 
     const newLikeIds = new Set<string>();
     const newZaps: { [id: string]: string; } = {};
