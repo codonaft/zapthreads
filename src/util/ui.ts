@@ -152,7 +152,8 @@ export const parseContent = (e: NoteEvent, store: PreferencesStore, articles: No
 
   const md = new Remarkable('full', {
     linkTarget: '_blank',
-    // TODO: typographer: true
+    typographer: true,
+    quotes: e.language === 'ru' ? '«»‘’' : '“”‘’',
   });
 
   // Markdown => HTML
