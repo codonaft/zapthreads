@@ -18,6 +18,8 @@ import { currentTime, MIN_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, SIX_HOURS_IN_SECS 
 import { errorText, parseContent } from "./ui.ts";
 import { updateBlockFilters, loadBlockFilters, applyBlock } from "./block-lists.ts";
 import { waitNostr } from "nip07-awaiter";
+import { sha256 } from "@noble/hashes/sha256";
+import { bytesToHex } from "@noble/hashes/utils";
 
 export const NOTE_KINDS = [ShortTextNote, Highlights];
 export const CONTENT_KINDS = [...NOTE_KINDS, Reaction, Zap];
@@ -773,5 +775,5 @@ const filterCacheKey = (relayUrl: string, filter: Filter) => {
    .filter(([k, _]) => !ignored.includes(k))
    .sort());
   const items = [relayUrl, store.anchor!.value, value];
-  return JSON.stringify(items);
-}
+  return bytesToHex(sha256(JSON.stringify(items)));
+};

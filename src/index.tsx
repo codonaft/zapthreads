@@ -228,15 +228,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       sub = null;
     });
 
-    // TODO restore with a specific `since` for aggregates
-    // (leaving it like this will fail when re-enabling likes/zaps)
-    // if (!store.disableFeatures().includes('likes')) {
-    //   kinds.push(Reaction);
-    // }
-    // if (!store.disableFeatures().includes('zaps')) {
-    //   kinds.push(Zap);
-    // }
-
     console.log(`[zapthreads] subscribing to ${_anchor.value} on`, [..._readRelays]);
 
     const queryNoteRootEvent = !store.anchorAuthor && anchor().type === 'note';

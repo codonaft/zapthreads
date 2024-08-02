@@ -64,7 +64,7 @@ export type CommentContext = {
   },
   text: {
     value: string;
-    overflowed: Signal<boolean>;
+    overflowed: Signal<boolean | undefined>;
     collapsed: Signal<boolean>;
   },
   votes: {

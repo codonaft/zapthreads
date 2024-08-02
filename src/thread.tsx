@@ -43,7 +43,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
         },
         text: {
           value: parsedContent,
-          overflowed: newSignal(parsedContent.length >= 330),
+          overflowed: newSignal<undefined | boolean>(undefined),
           collapsed: newSignal(true),
         },
         votes: {
@@ -70,7 +70,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
         const validationResult = validateNoteEvent({ e, minReadPow: store.minReadPow, replies: totalChildren(e), upvotes: upvotesCount(), downvotes: downvotesCount() }); // TODO: move reply calculation into the function?
         rank = store.ranks.get(e.id);
         if (rank === undefined) {
-          rank = props.firstLevelComments ? validationResult.rank : 0; // TODO: split validate and rank?
+          rank = props.firstLevelComments ? validationResult.rank : 0; // TODO: split validate and rank? onEvent and onEventWithRank
         }
 
         if (validationResult.showReportButton === true) {
@@ -117,14 +117,21 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
           }));
 
           const [ref, setRef] = createSignal<HTMLElement>();
-          createEffect(on([ref], () => {
+          const overflowed = () => {
+            const result = context().text.overflowed();
+            if (result !== undefined) return result;
+
             const style = getComputedStyle(ref()!);
             const emInPixels = parseFloat(style.fontSize);
             const maxHeight = parseFloat(style.maxHeight) || (5 * 1.5 * emInPixels); // TODO: use .ztr-comment-text-fade.max-height
             const height = parseFloat(style.height) || 0;
-            context().text.overflowed(height >= maxHeight);
-          }));
-          const overflowed = () => context().text.overflowed();
+            if (height > maxHeight) {
+              context().text.overflowed(true);
+              return true;
+            } else {
+              return false;
+            }
+          };
 
           createEffect(on([userObservedComments, tooLongCommentsSection], () => {
             const thread = context().thread;
