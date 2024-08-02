@@ -2,7 +2,7 @@ import { ShortTextNote, Metadata, Highlights, Reaction, Report, CommunityDefinit
 import { Filter } from "nostr-tools/filter";
 import { Event } from "nostr-tools/core";
 import { Block, BlockName, Eid, Pk } from "./models.ts";
-import { store } from "./stores.ts";
+import { store, isDisableType, signersStore } from "./stores.ts";
 import { pool } from "./network.ts";
 import { find, findAll, save, remove } from "./db.ts";
 import { HOUR_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, currentTime } from "./date-time.ts";
@@ -153,15 +153,15 @@ const loadModerators = async () => {
 
 const updateModeratorReports = async () => {
   const lastUpdate = await loadModerators();
-  const events: Event[] = await pool.querySync(store.readRelays, { kinds: [Report], authors: [...store.moderators] });
-  events
-    .filter(e => e.kind === Report && store.moderators.has(e.pubkey))
-    .forEach(processReport);
+
+  const currentUser = signersStore.active ? [signersStore.active!.pk] : [];
+  const authors = [...store.moderators, ...currentUser];
+
+  const events: Event[] = await pool.querySync(store.readRelays, { kinds: [Report], authors });
+  events.forEach(processReport);
 };
 
 const processReport = (e: Event) => {
-  if (!store.moderators.has(e.pubkey)) return;
-
   const reportedPks = e.tags.filter(t => t.length >= 2 && t[0] === 'p').map(t => t[1]);
   const expectedReportedPks = reportedPks.length > 0 && reportedPks.filter(pk => store.moderators.has(pk)).length === 0;
   if (!expectedReportedPks) return;

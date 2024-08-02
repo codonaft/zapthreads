@@ -60,7 +60,7 @@ Arguments:
    - Useful for notifying the author of a website (http anchor)
  - `community`: retrieve trusted moderators from here
    - anchor author (including `author`) is automatically a moderator
-   - comments reported by moderator are hidden
+   - comments reported by moderator and logged in user are hidden
  - `disable`: comma-separated string of features to disable, all enabled by default
    - `likes`
    - `votes`
