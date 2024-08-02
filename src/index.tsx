@@ -468,7 +468,7 @@ ZapThreads.onLogin = function (cb?: (options: { knownUser: boolean; }) => Promis
   return ZapThreads;
 };
 
-ZapThreads.onEvent = function (cb?: (event: { kind: number; content: string; replies: number; upvotes: number; downvotes: number; pow: number; language?: string; client?: string; }) => { sanitizedContent: string; rank?: number; showReportButton?: boolean; }) {
+ZapThreads.onEvent = function (cb?: (event: { rankable: boolean; kind: number; content: string; replies: number; upvotes: number; downvotes: number; pow: number; language?: string; client?: string; }) => { sanitizedContent: string; rank?: number; showReportButton?: boolean; }) {
   store.onEvent = cb;
   return ZapThreads;
 };

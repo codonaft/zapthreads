@@ -63,14 +63,25 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
   const validateAndRank = (events: NestedNoteEvent[]) => {
     const rankedEvents = [];
     const invalidEvents: Eid[] = [];
+    const rankable = !!props.firstLevelComments;
     for (const e of events) {
-      let rank;
+      let rank: number | undefined = 0;
+      let valid = false;
       try {
         const { upvotesCount, downvotesCount } = commentContext(e).votes;
-        const validationResult = validateNoteEvent({ e, minReadPow: store.minReadPow, replies: totalChildren(e), upvotes: upvotesCount(), downvotes: downvotesCount() }); // TODO: move reply calculation into the function?
-        rank = store.ranks.get(e.id);
-        if (rank === undefined) {
-          rank = props.firstLevelComments ? validationResult.rank : 0; // TODO: split validate and rank? onEvent and onEventWithRank
+        const validationResult = validateNoteEvent({
+          e,
+          rankable,
+          minReadPow: store.minReadPow,
+          replies: totalChildren(e), // TODO: move into the function?
+          upvotes: upvotesCount(),
+          downvotes: downvotesCount(),
+        });
+        valid = true;
+
+        if (rankable) {
+          rank = store.ranks.get(e.id) || validationResult.rank || 0;
+          store.ranks.set(e.id, rank); // avoid further sudden comment movements
         }
 
         if (validationResult.showReportButton === true) {
@@ -81,9 +92,8 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
         invalidEvents.push(e.id);
       }
 
-      if (rank !== undefined) {
+      if (valid) {
         rankedEvents.push({ rank, e });
-        store.ranks.set(e.id, rank); // avoid further sudden comment movements
       }
     }
     return rankedEvents;

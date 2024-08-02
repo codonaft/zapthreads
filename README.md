@@ -137,12 +137,22 @@ ZapThreads
   .onReport(async ({}) => {
     return { accepted: true, list: 'event', type: 'other', reason: '' };
   })
-  .onEvent(({ kind, content, replies, upvotes, downvotes, pow, language, client }) => {
+  .onEvent(({ rankable, kind, content, replies, upvotes, downvotes, pow, language, client }) => {
     if (kind === 1 && content.includes('poker')) {
       throw new Error("No spamming please, we're discussing important things here");
     }
-    const rank = (content.length > 1000 ? -1 : 0) + (upvotes + downvotes) * 100;
-    return { sanitizedContent: content.replaceAll('perkele', 'mind-blowing'), rank, showReportButton: rank < 0 };
+
+    let result = {
+      sanitizedContent: content.replaceAll('perkele', 'mind-blowing'),
+      showReportButton: content.includes('banana'),
+    };
+
+    if (rankable) {
+      const rank = (content.length > 1000 ? -1 : 0) + (upvotes - downvotes) * 100;
+      result = { ...result, rank };
+    }
+
+    return result;
   })
 ```
 

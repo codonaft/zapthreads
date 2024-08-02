@@ -729,23 +729,24 @@ export const validateEvent = (e: UnsignedEvent & { id: undefined } | Event, minR
   const replies = 0;
   const upvotes = 0;
   const downvotes = 0;
+  const rankable = false;
   if (NOTE_KINDS.includes(e.kind)) {
-    return validateNoteEvent({ e: eventToNoteEvent(e), minReadPow, replies, upvotes, downvotes });
+    return validateNoteEvent({ e: eventToNoteEvent(e), rankable, minReadPow, replies, upvotes, downvotes });
   };
 
   preValidate({ id: e.id, pubkey: e.pubkey, kind: e.kind, powOrTags: e.tags, content: e.content }, minReadPow);
   const client = parseClient(e.tags);
   const result = store.onEvent
-    ? store.onEvent({ kind: e.kind, content: e.content, client, replies, upvotes, downvotes, pow: store.writePowDifficulty })
+    ? store.onEvent({ rankable, kind: e.kind, content: e.content, client, replies, upvotes, downvotes, pow: store.writePowDifficulty })
     : { sanitizedContent: e.content, rank: undefined, showReportButton: false };
   return { ...result, noteEvent: undefined };
 };
 
-export const validateNoteEvent = (args: { e: NoteEvent; minReadPow?: number; replies: number; upvotes: number; downvotes: number; }) => {
-  const { e, minReadPow, replies, upvotes, downvotes } = args;
+export const validateNoteEvent = (args: { e: NoteEvent; rankable: boolean; minReadPow?: number; replies: number; upvotes: number; downvotes: number; }) => {
+  const { e, rankable, minReadPow, replies, upvotes, downvotes } = args;
   preValidate({ id: e.id, pubkey: e.pk, kind: e.k, powOrTags: e.pow, content: e.c }, minReadPow);
   const result = store.onEvent
-    ? store.onEvent({ kind: e.k, content: parseContent(e, store), replies, upvotes, downvotes, client: e.client, language: e.language, pow: e.pow })
+    ? store.onEvent({ rankable, kind: e.k, content: parseContent(e, store), replies, upvotes, downvotes, client: e.client, language: e.language, pow: e.pow })
     : { sanitizedContent: e.c, rank: undefined, showReportButton: false }
   return { ...result, noteEvent: e };
 };
