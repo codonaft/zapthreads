@@ -288,6 +288,10 @@ class PrioritizedPool {
       `[zapthreads] publishing to ${fastRelays.length + slowRelays.length} relays` +
       (unsupported + offlineRelays > 0 ? ` (ignored ${unsupported} unsupported, ${offlineRelays} failing)` : ''));
 
+    if (store.onPublish && !(await store.onPublish({ relays: [...fastRelays, ...slowRelays] })).accepted) {
+      return { ok: 0, failures: 0 };
+    }
+
     const result = await this.concurrentPublish(event, fastRelays);
     this.concurrentPublish(event, slowRelays);
 

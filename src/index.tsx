@@ -481,6 +481,11 @@ ZapThreads.onEvent = function (cb?: (event: { rankable: boolean; kind: number; c
   return ZapThreads;
 };
 
+ZapThreads.onPublish = function (cb?: (event: { relays: string[]; }) => Promise<{ accepted: boolean; }>) {
+  store.onPublish = cb;
+  return ZapThreads;
+};
+
 ZapThreads.onRemove = function (cb?: (event: { content: string; }) => Promise<{ accepted: boolean; }>) {
   store.onRemove = cb;
   return ZapThreads;

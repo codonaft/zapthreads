@@ -154,6 +154,12 @@ ZapThreads
 
     return result;
   })
+  .onPublish(async ({ relays }) => {
+    if (relays.length === 0) {
+      // no available write relays, perhaps they are no set
+    }
+    return { accepted: true };
+  })
 ```
 
 ## Development

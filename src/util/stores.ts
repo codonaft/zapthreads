@@ -112,9 +112,10 @@ export type PreferencesStore = {
   community?: string;
   moderators: ReactiveSet<Pk>;
   profiles: () => Profile[];
-  onLogin?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin?: boolean }>;
+  onLogin?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin?: boolean; }>;
   onEvent?: (event: { rankable: boolean; kind: number; content: string; replies: number; upvotes: number; downvotes: number; pow: number; language?: string; client?: string; }) => { sanitizedContent?: string; rank?: number; showReportButton?: boolean; };
-  onRemove?: (event: { content: string; }) => Promise<{ accepted: boolean }>;
+  onPublish?: (event: { relays: string[]; }) => Promise<{ accepted: boolean; }>;
+  onRemove?: (event: { content: string; }) => Promise<{ accepted: boolean; }>;
   onReport?: (event: {}) => Promise<{ accepted?: boolean; list?: 'event' | 'pubkey'; type?: 'nudity' | 'malware' | 'profanity' | 'illegal' | 'spam' | 'impersonation' | 'other'; reason?: string; }>;
 };
 
