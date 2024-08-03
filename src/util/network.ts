@@ -18,7 +18,7 @@ import { medianOrZero, maxBy } from "./collections.ts";
 import { currentTime, MIN_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, SIX_HOURS_IN_SECS } from "./date-time.ts";
 import { errorText, parseContent, totalChildren } from "./ui.ts";
 import { updateBlockFilters, loadBlockFilters, applyBlock } from "./block-lists.ts";
-import { waitNostr } from "nip07-awaiter";
+import { waitNostr } from "./nip07-awaiter.ts";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@noble/hashes/utils";
 
@@ -639,7 +639,7 @@ export const signAndPublishEvent = async (unsignedEvent: UnsignedEvent, signer: 
 export const loginIfKnownUser = async () => {
   waitNostr(0);
 
-  const session = await find('sessions', 1, { index: 'autoLogin' });
+  const session = await find('sessions', +true, { index: 'autoLogin' });
   if (!session) return;
 
   const nostr = await waitNostr(1000);
@@ -651,7 +651,7 @@ export const loginIfKnownUser = async () => {
   const pubkey = await nostr.getPublicKey();
   if (pubkey !== session.pk) {
     console.log('[zapthreads] unknown user, disabling auto-login');
-    save('sessions', { ...session, autoLogin: 0 });
+    save('sessions', { ...session, autoLogin: +false });
     return;
   }
 
@@ -669,24 +669,26 @@ export const manualLogin = async () => {
   let pk: Pk | undefined;
   const sessions = await findAll('sessions', +false, { index: 'autoLogin' });
   if (sessions.length > 0) {
-    if (!window.nostr) {
-      throw new Error('No NIP-07 extension!');
-    }
-    pk = await window.nostr!.getPublicKey();
-    const session = sessions.find(s => s.pk === pk);
-    if (session) {
-      if (store.onLogin && await store.onLogin({ knownUser: true })) {
-        console.log('[zapthreads] re-enabling auto-login');
-        signersStore.active = {
-          pk,
-          signEvent: async (event: UnsignedEvent) => await window.nostr!.signEvent(event),
-        };
-        save('sessions', { ...session, autoLogin: +true });
-      } else {
-        // @ts-ignore
-        remove('sessions', [pk]);
+    if (window.nostr) {
+      pk = await window.nostr!.getPublicKey();
+      const session = sessions.find(s => s.pk === pk);
+      if (session) {
+        if (store.onLogin && await store.onLogin({ knownUser: true })) {
+          console.log('[zapthreads] re-enabling auto-login');
+          signersStore.active = {
+            pk,
+            signEvent: async (event: UnsignedEvent) => await window.nostr!.signEvent(event),
+          };
+          save('sessions', { ...session, autoLogin: +true });
+        } else {
+          // @ts-ignore
+          remove('sessions', [pk]);
+        }
+        return;
       }
-      return;
+    } else {
+      console.log('[zapthreads] nip-07 is probably removed, disabling auto-login');
+      sessions.forEach(session => save('sessions', { ...session, autoLogin: +false }));
     }
   }
 
