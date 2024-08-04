@@ -52,7 +52,7 @@ function App() {
     </h3>
     <h3>(or input your own) &nbsp;<input type='text' value={anchor()} onChange={(e) => setAnchor(e.target.value)}></input></h3>
 
-    <For each={['publish', 'likes', 'zaps', 'reply', 'replyAnonymously']}>
+    <For each={['publish', 'likes', 'zaps', 'reply']}>
       {feature => <label><input type="checkbox" checked={disabled().includes(feature)} onChange={(e) => {
         if (e.target.checked) {
           setDisabled([...disabled(), feature]);
