@@ -1,49 +1,42 @@
-# ZapThreads
+# zapthreads-codonaft
 
-A threaded web commenting system built on Nostr. Inspired by [stacker.news](https://stacker.news) and [NoComment](https://github.com/fiatjaf/nocomment).
+NIP-07-only fork of original [ZapThreads](https://github.com/franzaps/zapthreads#readme) web commenting system built on Nostr.
 
-NIP-07-only fork with additional features.
+Test it here: https://codonaft.com/improved-zapthreads
 
-Compare with upstream version:
- - [https://zapthreads.dev](https://zapthreads.dev)
- - Any article on [Habla.news](https://habla.news)
+![](https://codonaft.com/assets/img/zapthreads-codonaft.webp)
 
-![](https://image.nostr.build/2cf766ce82678fa59dbb988e0efbf722877a5c768615704836f038c342858524.png)
-
-## Features
-
- - Works on a variety of root events: `note`, `nevent`, `naddr`, URLs
- - Markdown support and nostr reference handling
- - Extremely versatile and customizable
-   - Enable/disable many features via attributes
-   - Light/dark modes
-   - Full styling control
-   - Multiple languages (coming soon)
- - Lightweight on clients and relays
-   - Local storage caching, offline-first
-   - ~40kb minified/compressed with styles and assets (nocomment is > 240kb)
- - Available as web component or embeddable script
+## Main Changes
+ - Upvotes/downvotes
+ - Comment removal (limited, comments will still persist in browser cache for others)
  - Auto thread collapsing for too long discussions
- - Optional comments filtering: NIP-13 PoW, spam block-listing, custom filtering
+ - Customizable comments filtering and ranking: by PoW, replies number, language, etc.
+    - Replies are always sorted by time in ascending order
+    - Optional filtering using [spam.nostr.band](https://spam.nostr.band)
+ - Moderation (reporting and mute-listing)
+ - Optionally remembers currently logged in user
+ - Optional relay info support
+ - Optional callbacks for various actions for better website integration
+ - Visual UI changes
+ - Bugfixes and performance optimizations
 
 ## Usage
 
-```
-npm install zapthreads
-```
+```bash
+npm i
 
-or
-
+node_modules/.bin/vite build
+# node_modules/.bin/vite build --minify false --mode debug
 ```
-<script type="text/javascript" src="https://unpkg.com/zapthreads/dist/zapthreads.iife.js"></script>
-```
-
-Then,
 
 ```html
-import "zapthreads";
+<script type="text/javascript" src="dist/zapthreads.iife.js"></script>
 
-<zap-threads anchor="naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk6zne58wzh0waycrqsqqqa28pjfdhz" ... />
+<zap-threads
+  anchor="naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk6zne58wzh0waycrqsqqqa28pjfdhz"
+  relays="wss://relay.nostr.band,wss://nostr-pub.wellorder.net/"
+  disable="likes,singleVoteCounter"
+  />
 ```
 
 Arguments:
@@ -69,7 +62,6 @@ Arguments:
    - `reply` (when disabled the component becomes read-only)
    - `publish` (when disabled does not send event to relays, useful for testing)
    - `watch` (when disabled queries relays and closes the connection immediately on EOSE)
-   - `replyAnonymously` (when disabled requires logging in in order to publish)
    - `hideContent` (when disabled it shows the content if the anchor is a naddr)
    - `relayInformation` (when disabled NIP-11 relay filtering is off)
    - `spamNostrBand`
@@ -78,10 +70,10 @@ Arguments:
    - `https://` will be automatically prepended
  - `language`: allowed language, no restrictions by default
    - ISO-639-1 two-letter code only
-   - ignores relays with unsupported language (unless `relayInformation` is disabled)
+   - ignores relays with unsupported language (unless `disable="relayInformation"` is set)
    - labels comments sent from the client with the language tag
      - note: there's no validation whether user actually sent message in this language, use `onEvent` to validate it
- - `client`: string with client name (like `zapthreads` or your domain name, etc.)
+ - `client`: string with client name (like `zapthreads-codonaft` or your domain name, etc.)
    - adds client tag, unset by default
  - `max-comment-length`: limit comment length, disabled by default
  - `min-read-pow` and `max-write-pow`: difficulty boundaries that determine how warm we make our planet while desperately fighting spam, `0` by default
@@ -89,16 +81,8 @@ Arguments:
      - difficulty validation is done on client if any read relay doesn't implement NIP-13 or doesn't have required difficulty limitation
    - write pow difficulty is determined as maximum of
      - `min-read-pow`
-     - current minimal pow of write relays limitations, bounded by `max-write-pow`
+     - current minimal pow of write relays limitations (unless `disable="relayInformation"` is set), bounded by `max-write-pow`
    - `anchor` difficulty is ignored, it can be `0`
-
-```html
-<zap-threads 
-  anchor="naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk6zne58wzh0waycrqsqqqa28pjfdhz"
-  relays="wss://relay.nostr.band,wss://nostr-pub.wellorder.net/"
-  disable="likes"
-  />
-```
 
 ## Customize
 
@@ -127,7 +111,7 @@ document.querySelector('zap-threads').shadowRoot.appendChild(style);
 ZapThreads
   .onLogin(async ({ knownUser }) => {
     if (!knownUser) {
-      // show custom consent dialog that normal user probably doesn't read anyway
+      // annoy with consent dialog here
     }
     return { accepted: true, autoLogin: true };
   })
@@ -142,32 +126,24 @@ ZapThreads
       throw new Error("No spamming please, we're discussing important things here");
     }
 
-    let result = {
-      sanitizedContent: content.replaceAll('perkele', 'mind-blowing'),
-      showReportButton: content.includes('https://'),
-    };
-
+    let rank;
     if (rankable) {
-      const rank = (content.length > 1000 ? -1 : 0) + (upvotes - downvotes) * 100;
-      result = { ...result, rank };
+      rank = (content.length > 1000 ? -1 : 0) + (upvotes - downvotes) * 100;
     }
 
-    return result;
+    return {
+      sanitizedContent: content.replaceAll('perkele', 'mind-blowing'),
+      showReportButton: content.includes('https://'),
+      rank,
+    };
   })
   .onPublish(async ({ relays }) => {
     if (relays.length === 0) {
-      // no available write relays, perhaps they are no set
+      // no available write relays, perhaps they are not set
     }
     return { accepted: true };
   })
 ```
-
-## Development
-
- - Install with `pnpm i` and run the app with `pnpm dev`
- - Build with `pnpm build`, it will place the bundles in `dist`
-
-Any questions or ideas, please open an issue!
 
 ## Icons
 - [Font Awesome](https://fontawesome.com/license/free)
