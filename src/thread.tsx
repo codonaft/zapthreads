@@ -7,7 +7,7 @@ import { NestedNoteEvent } from "./util/nest.ts";
 import { noteEncode, npubEncode } from "nostr-tools/nip19";
 import { UnsignedEvent, Event } from "nostr-tools/core";
 import { Relay } from "nostr-tools/relay";
-import { Metadata, ShortTextNote, EventDeletion, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
+import { Metadata, ShortTextNote, EventDeletion, Highlights, Reaction, Report, CommunityDefinition, Mutelist, Zap } from "nostr-tools/kinds";
 import { EventSigner, signersStore, store, CommentContext } from "./util/stores.ts";
 import { NoteEvent, Profile, Pk, ReactionEvent, VoteKind, Eid, voteKind } from "./util/models.ts";
 import { remove } from "./util/db.ts";
@@ -282,14 +282,21 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
 
             const eid = event().id;
             const tagPrefix = report.list === 'event' ? ['e', eid] : ['p', event().pk];
-            const sentRequest = await signAndPublishEvent({
+            const sentReportRequest = await signAndPublishEvent({
               kind: Report,
               created_at: currentTime(),
               content: report.reason || '',
               pubkey: signer.pk,
               tags: [[...tagPrefix, report.type || 'other']],
             }, signer);
-            if (sentRequest) {
+            const sentMutelistRequest = await signAndPublishEvent({
+              kind: Mutelist,
+              created_at: currentTime(),
+              content: report.reason || '',
+              pubkey: signer.pk,
+              tags: [tagPrefix],
+            }, signer);
+            if (sentReportRequest || sentMutelistRequest) {
               remove('events', [eid]); // TODO: subscribe to new reports instead?
             }
           };

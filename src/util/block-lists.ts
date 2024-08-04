@@ -1,4 +1,4 @@
-import { ShortTextNote, Metadata, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
+import { ShortTextNote, Metadata, Mutelist, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
 import { Filter } from "nostr-tools/filter";
 import { Event } from "nostr-tools/core";
 import { Block, BlockName, Eid, Pk } from "./models.ts";
@@ -63,7 +63,7 @@ export const updateBlockFilters = async (lastUpdateBlockFilters: number) => {
   store.blocks.checkUpdates = false;
 
   await updateSpamNostrBand(lastUpdateBlockFilters);
-  await updateModeratorReports();
+  await updateModeratorBlocks();
 
   console.log('[zapthreads] updated block-lists');
 };
@@ -146,28 +146,38 @@ const loadModerators = async () => {
   return lastUpdate;
 };
 
-const updateModeratorReports = async () => {
+const updateModeratorBlocks = async () => {
   const lastUpdate = await loadModerators();
 
   const currentUser = signersStore.active ? [signersStore.active!.pk] : [];
   const authors = [...store.moderators, ...currentUser];
 
-  const events: Event[] = await pool.querySync(store.readRelays, { kinds: [Report], authors });
-  events.forEach(processReport);
+  const events: Event[] = await pool.querySync(store.readRelays, { kinds: [Report, Mutelist], authors });
+  events.forEach(e => {
+    if (e.kind === Report) processReport(e.tags);
+    else if (e.kind === Mutelist) processMutelist(e.tags);
+  });
 };
 
-const processReport = (e: Event) => {
-  const reportedPks = e.tags.filter(t => t.length >= 2 && t[0] === 'p').map(t => t[1]);
+const processReport = (tags: string[][]) => {
+  const reportedPks = tags.filter(t => t.length >= 2 && t[0] === 'p').map(t => t[1]);
   const expectedReportedPks = reportedPks.length > 0 && reportedPks.filter(pk => store.moderators.has(pk)).length === 0;
   if (!expectedReportedPks) return;
 
-  const reportedEvents = e.tags.filter(t => t.length >= 3 && t[0] === 'e');
+  const reportedEvents = tags.filter(t => t.length >= 3 && t[0] === 'e');
   if (reportedEvents.length > 0) {
     reportedEvents.forEach(t => applyBlock('eventsBlocked', t[1], t[2]));
   } else {
-    e
-      .tags
+    tags
       .filter(t => t.length >= 3 && t[0] === 'p')
       .forEach(t => applyBlock('pubkeysBlocked', t[1], t[2]));
   }
+};
+
+const processMutelist = (tags: string[][]) => {
+  const entries = tags.filter(i => i.length === 2);
+  const pubkeys = entries.filter(t => t[0] === 'p').map(t => t[1]);
+  const events = entries.filter(t => t[0] === 'e').map(t => t[1]);
+  pubkeys.forEach(pk => applyBlock('pubkeysBlocked', pk, 'Mute-listed user'));
+  events.forEach(eid => applyBlock('eventsBlocked', eid, 'Mute-listed event'));
 };
