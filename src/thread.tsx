@@ -236,7 +236,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
                 created_at: currentTime(),
                 content: '',
                 pubkey: signer.pk,
-                tags: eids.map(eid => ['e', eid]),
+                tags: [...eids.map(eid => ['e', eid]), ...eids.map(_ => ['k', `${Reaction}`])],
               }, signer);
               if (sentRequest) {
                 remove('reactions', eids);
@@ -262,7 +262,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
                 created_at: currentTime(),
                 content: '',
                 pubkey: signer.pk,
-                tags: [['e', eid]],
+                tags: [['e', eid], ['k', `${ShortTextNote}`]],
               }, signer);
               if (sentRequest) {
                 remove('events', [eid]);

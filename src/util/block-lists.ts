@@ -41,31 +41,42 @@ export const applyBlock = async (list: BlockName, id: Eid | Pk, reason?: string)
   }
 };
 
-export const loadBlockFilters = async () => {
-  const lastUpdate = Math.max(await loadModerators(), await loadBlocked());
-
-  const now = currentTime();
-  const deadline = lastUpdate + DAY_IN_SECS;
-  if (now < deadline) {
-    console.log(`[zapthreads] block filters will be updated in ${((deadline - now) / HOUR_IN_SECS).toFixed(1)} hours`);
-    return { communityFilter: [], lastUpdateBlockFilters: lastUpdate };
-  }
-
-  const communityFilter: Filter[] = store.community && store.anchorAuthor
-    ? [{ kinds: [CommunityDefinition], since: lastUpdate + 1, "#a": [`${CommunityDefinition}:${store.anchorAuthor}:${store.community}`] }]
-    : [];
-
-  return { communityFilter, lastUpdateBlockFilters: lastUpdate }
-};
+export const loadBlockFilters = async () => Math.max(await loadModerators(), await loadBlocked());
 
 export const updateBlockFilters = async (lastUpdateBlockFilters: number) => {
   if (!store.blocks.checkUpdates) return;
   store.blocks.checkUpdates = false;
 
   await updateSpamNostrBand(lastUpdateBlockFilters);
+  await updateCommunityModerators();
   await updateModeratorBlocks();
 
   console.log('[zapthreads] updated block-lists');
+};
+
+const updateCommunityModerators = async () => {
+  if (!store.community || !store.anchorAuthor) return;
+
+  const community = store.community && await find('communities', IDBKeyRange.only(store.community));
+  const since = community ? community.l + 1 : 0;
+
+  const now = currentTime();
+  const deadline = since + DAY_IN_SECS;
+  if (community && now < deadline) return;
+
+  const events: Event[] = await pool.querySync(
+    store.readRelays,
+    { kinds: [CommunityDefinition], authors: [store.anchorAuthor], "#d": [store.community], since },
+  );
+  events.forEach(e => {
+    if (e.kind === CommunityDefinition) {
+      const moderators = e
+        .tags
+        .filter(t => t.length >= 4 && t[0] === 'p' && t[3] === 'moderator')
+        .map(t => t[1]);
+      save('communities', { community: store.community!, moderators, l: currentTime() }, { immediate: true });
+    }
+  });
 };
 
 const loadBlocked = async () => {
@@ -128,7 +139,7 @@ const updateSpamNostrBand = async (lastUpdateBlockFilters: number) => {
       console.error(e);
     }
   }));
-  console.log('[zapthreads] updated spam filters');
+  console.log('[zapthreads] updated spam.nostr.band');
 };
 
 const loadModerators = async () => {

@@ -246,5 +246,5 @@ export const normalizeURL = (url: string, removeSlashes: boolean = true): string
 
 export const errorText = <T>(exception: T) => {
   const err = (exception as any);
-  return err?.message || (err?.reason && String(err?.reason)) || '';
+  return err?.message || String(err?.reason);
 };

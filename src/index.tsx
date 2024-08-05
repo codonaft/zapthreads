@@ -216,7 +216,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       return;
     }
 
-    const { communityFilter, lastUpdateBlockFilters } = await loadBlockFilters();
+    const lastUpdateBlockFilters = await loadBlockFilters();
 
     // Ensure clean subs
     sub?.close();
@@ -241,7 +241,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
       if (zapsDisabled) result &&= k !== Zap;
       return result;
     });
-    const request = (url: string) => [url, [...communityFilter, ...rootEventFilter, { ..._filter, kinds }]];
+    const request = (url: string) => [url, [...rootEventFilter, { ..._filter, kinds }]];
 
     const newLikeIds = new Set<string>();
     const newZaps: { [id: string]: string; } = {};
@@ -271,12 +271,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
             } else if (e.kind === Zap) {
               const invoiceTag = e.tags.find(t => t[0] === "bolt11");
               invoiceTag && invoiceTag[1] && (newZaps[e.id] = invoiceTag[1]);
-            } else if (e.kind === CommunityDefinition) {
-              const moderators = e
-                .tags
-                .filter(t => t.length >= 4 && t[0] === 'p' && t[3] === 'moderator')
-                .map(t => t[1]);
-              save('communities', { community: store.community!, moderators, l: currentTime() });
             }
           })()
         },
