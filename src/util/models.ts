@@ -68,8 +68,13 @@ export type Profile = {
 };
 
 export type Session = {
-  pk: string;
+  pk: Pk;
   autoLogin: number;
+};
+
+export type ProfileRelays = {
+  pk: Pk;
+  relays: string;
 };
 
 export type RequestFilter = {
@@ -140,6 +145,10 @@ export interface ZapthreadsSchema extends DBSchema {
       'l': number;
     };
   };
+  profileRelays: {
+    key: string;
+    value: ProfileRelays;
+  };
   sessions: {
     key: string;
     value: Session;
@@ -180,7 +189,8 @@ export const indices: { [key in StoreNames<ZapthreadsSchema>]: any } = {
   'events': 'id',
   'reactions': 'id',
   'aggregates': ['eid', 'k'],
-  'profiles': ['pk'],
+  'profiles': 'pk',
+  'profileRelays': 'pk',
   'sessions': 'pk',
   'requestFilters': 'key',
   'relayInfos': 'name',
@@ -211,6 +221,8 @@ export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion
 
   const profiles = db.createObjectStore('profiles', { keyPath: indices['profiles'] });
   profiles.createIndex('l', 'l');
+
+  const profileRelays = db.createObjectStore('profileRelays', { keyPath: indices['profileRelays'] });
 
   const sessions = db.createObjectStore('sessions', { keyPath: indices['sessions'] });
   sessions.createIndex('autoLogin', 'autoLogin');

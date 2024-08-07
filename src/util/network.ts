@@ -6,7 +6,7 @@ import { SubCloser, AbstractPoolConstructorOptions, SubscribeManyParams as Subsc
 import { AbstractRelay as AbstractRelay, SubscriptionParams, Subscription, type AbstractRelayConstructorOptions } from "nostr-tools/abstract-relay";
 import { getEventHash, verifyEvent } from "nostr-tools/pure";
 import { Relay, RelayRecord } from "nostr-tools/relay";
-import { ShortTextNote, Metadata, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
+import { ShortTextNote, Metadata, Highlights, Reaction, Report, CommunityDefinition, Zap, RelayList } from "nostr-tools/kinds";
 import { RelayInformation } from "nostr-tools/nip11";
 import { getPow, minePow } from "nostr-tools/nip13";
 import { npubEncode } from "nostr-tools/nip19";
@@ -24,6 +24,7 @@ import { bytesToHex } from "@noble/hashes/utils";
 
 export const NOTE_KINDS = [ShortTextNote, Highlights];
 export const CONTENT_KINDS = [...NOTE_KINDS, Reaction, Zap];
+export const PROFILE_RELAYS = ['wss://purplepag.es/', 'wss://hist.nostr.land'];
 
 type SubscribeManyParams = SubscribeManyParamsDefault & { oneoseOnRelay?: (relay: string) => void; };
 
@@ -73,12 +74,55 @@ class PrioritizedPool {
   }
 
   async updateRelays(rawRelays?: string) {
-    const loggedIn = signersStore.active && window.nostr;
-    const relaysFromExtension = loggedIn ? await window.nostr!.getRelays() : {};
+    const relaysAreOk = (externalRelays: RelayRecord) => {
+      const entries = Object.values(externalRelays);
+      return !!(entries.find(i => i.read) && entries.find(i => i.write));
+    };
 
-    const splitRelays: RelayRecord =
-      loggedIn && Object.keys(relaysFromExtension).length > 0
-      ? relaysFromExtension
+    let requestedFromProfile = false;
+    const loggedIn = signersStore.active && window.nostr;
+    let externalRelays: RelayRecord = {};
+
+    const reloadFromProfile = async () => {
+      const pk = signersStore.active!.pk;
+      const events = await this.querySync([...store.readRelays, ...PROFILE_RELAYS], { authors: [pk], kinds: [RelayList] });
+      const lastEvent = maxBy(events, e => e.created_at);
+      const tags = lastEvent ? lastEvent.tags : [];
+      const externalRelays = Object.fromEntries(
+       tags
+        .filter(t => t.length >= 2 && t[0] === 'r')
+        .map(t => {
+          let entry = { read: true, write: true };
+          if (t.length === 3) {
+            const read = t[2] === 'read';
+            entry[!read ? 'read' : 'write'] = false;
+          }
+          return [t[1], entry];
+        }));
+      if (relaysAreOk(externalRelays)) {
+        save('profileRelays', { pk, relays: JSON.stringify(externalRelays) });
+      }
+      return externalRelays;
+    };
+
+    if (loggedIn) {
+      const pk = signersStore.active!.pk;
+      externalRelays = await window.nostr!.getRelays();
+      if (!relaysAreOk(externalRelays)) {
+        const profileRelays = await find('profileRelays', IDBKeyRange.only(pk));
+        if (profileRelays) {
+          externalRelays = JSON.parse(profileRelays.relays);
+        }
+      }
+
+      if (!relaysAreOk(externalRelays)) {
+        requestedFromProfile = true;
+        externalRelays = await reloadFromProfile();
+      }
+    }
+
+    const splitRelays: RelayRecord = loggedIn && relaysAreOk(externalRelays)
+      ? externalRelays
       : Object.fromEntries(
           (rawRelays || '')
             .split(',')
@@ -101,6 +145,10 @@ class PrioritizedPool {
     }));
     console.log(`[zapthreads] readRelays=${JSON.stringify(store.readRelays)} writeRelays=${JSON.stringify(store.writeRelays)}`);
     await this.updateWritePow();
+
+    if (loggedIn && !requestedFromProfile) {
+      reloadFromProfile();
+    }
   }
 
   async subscribeMany(relays: string[], filters: Filter[], params: SubscribeManyParams): Promise<SubCloser> {

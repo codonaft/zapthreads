@@ -9,7 +9,7 @@ import { Remarkable } from 'remarkable';
 import { findAll, save } from "./db.ts";
 import { store } from "./stores.ts";
 import { NoteEvent, Profile, Pk, Eid, ReactionEvent } from "./models.ts";
-import { pool, rankRelays } from "./network.ts";
+import { pool, rankRelays, PROFILE_RELAYS } from "./network.ts";
 import { currentTime } from "./date-time.ts";
 
 // Misc profile helpers
@@ -43,7 +43,7 @@ export const updateProfiles = async (pubkeys: Set<Pk>, relays: string[], profile
   const filters = [{ kinds: [kind], authors: [...pubkeysToUpdate], since: since === Infinity ? 0 : since }];
   const update = async (relays: string[]) => {
     if (relays.length === 0) return;
-    await pool.subscribeManyEose(relays, filters, {
+    await pool.subscribeManyEose([...relays, ...PROFILE_RELAYS], filters, {
       onevent(e: Event) {
         const pubkey = e.pubkey;
         if (!pubkeysToUpdate.has(pubkey)) return;

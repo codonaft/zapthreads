@@ -14,6 +14,7 @@ Test it here: https://codonaft.com/improved-zapthreads
     - Replies are always sorted by time in ascending order
     - Optional filtering using [spam.nostr.band](https://spam.nostr.band)
  - Moderation (reporting and mute-listing)
+ - Relays retrieval from browser extension and from profile relay list as fallback
  - Optionally remembers currently logged in user
  - Optional relay info support
  - Optional callbacks for various actions for better website integration
