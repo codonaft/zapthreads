@@ -7,19 +7,50 @@ Test it here: https://codonaft.com/improved-zapthreads
 ![](https://codonaft.com/assets/img/zapthreads-codonaft.webp)
 
 ## Main Changes
- - Upvotes/downvotes
- - Comment removal (limited, comments will still persist in browser cache for others)
- - Auto thread collapsing for too long discussions
- - Customizable comments filtering and ranking: by PoW, replies number, language, etc.
-    - Replies are always sorted by time in ascending order
-    - Optional filtering using [spam.nostr.band](https://spam.nostr.band)
- - Moderation (reporting and mute-listing)
- - Relays retrieval from browser extension and from profile relay list as fallback
- - Optionally remembers currently logged in user
- - Optional relay info support
- - Optional callbacks for various actions for better website integration
- - Visual UI changes
- - Bugfixes and performance optimizations
+- [x] Voting for comments (Reddit and YouTube-like)
+- [x] Comment removal
+  - limited, comments won't disappear for those who already loaded them
+- [x] Auto thread collapsing for too long discussions
+- [x] Customizable comments filtering, sanitizing and ranking
+  - by NIP-13 PoW, replies number, language, etc.
+  - Replies are always sorted by time in ascending order
+  - Optional filtering using [spam.nostr.band](https://spam.nostr.band)
+- [x] Moderation (reporting and mute-listing, moderators retrieval from community)
+- [x] Relays retrieval from NIP-07 browser extension and from NIP-65 relay list as fallback
+- [x] Optional persistent user sessions
+- [x] Optional relay capabilities testing using NIP-11
+- [x] Callbacks for better website integration
+- [x] Bugfixes and performance optimizations
+
+Some of the stuff I may work on later:
+- [ ] Voting for author's root post
+- [ ] Label author's answers and reactions with avatar, similar to YouTube
+- [ ] (API for) Logout button
+- [ ] (API for) Follow author's profile button
+- [ ] Show Report button when hovering on comment only
+- [ ] Button that resends your comment to the previously failed relays
+- [ ] Rank by reports from other users
+- [ ] Fix comments and replies counters
+  - currently they ignore filtered out (due to moderation) comments
+- [ ] <kbd>Ctrl</kbd> + <kbd>↵</kbd> / <kbd>⌘</kbd> + <kbd>↵</kbd> hotkey to reply
+- [ ] Faster NIP-13 PoW implementation
+- [ ] [Gossip](https://github.com/frnandu/yana/blob/master/GOSSIP.md) model
+- [ ] Turn all animated avatars into static pictures, animate them on hover only
+- Zaps
+    - [ ] Zap comment
+    - [ ] Rank comments by zaps
+- Moderation
+    - [ ] Make moderated comments filtering instant
+      - currently some lag is still possible
+    - [ ] Blur images from comments reported as NSFW, unblur on hover
+    - [ ] Blur avatars from users reported as NSFW, unblur on hover
+    - [ ] Show comments with a negative vote rating more transparent
+      - the lower the rating—the lower opacity
+      - normal opacity on hover
+
+Your [⚡zaps](https://codonaft.com/sponsor) help me allocate time on these! 🙏🏼
+
+PRs are also welcome!
 
 ## Usage
 
