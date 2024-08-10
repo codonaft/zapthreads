@@ -96,8 +96,6 @@ export const encodedEntityToFilter = (entity: string): Filter => {
   }
 };
 
-const URL_REGEX = /(?<=^|\s)https?:\/\/[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&\/\/=]*)/gi;
-const IMAGE_REGEX = /(\S*(?:png|jpg|jpeg|gif|webp|svg))/gi;
 const BAD_NIP27_REGEX = /(?<=^|\s)@?((naddr|npub|nevent|note)[a-z0-9]{20,})/g;
 const ANY_HASHTAG = /\B\#([a-zA-Z0-9]+\b)(?!;)/g;
 
@@ -105,14 +103,6 @@ export const parseContent = (e: NoteEvent, store: PreferencesStore, articles: No
   let content = e.c;
   const urlPrefixes = store.urlPrefixes!;
   const profiles = store.profiles!;
-
-  // replace http(s) links + images
-  content = content.replace(URL_REGEX, (url) => {
-    if (url.match(IMAGE_REGEX)) {
-      return `![image](${url})`;
-    }
-    return `[${url}](${url})`;
-  });
 
   // turn hashtags into links (does not match hashes in URLs)
   const hashtags = [...new Set(e.t)];
