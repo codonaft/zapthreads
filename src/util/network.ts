@@ -12,13 +12,13 @@ import { getPow, minePow } from "nostr-tools/nip13";
 import { npubEncode } from "nostr-tools/nip19";
 import { find, findAll, save, onSaved, remove } from "./db.ts";
 import { EventSigner, store, signersStore } from "./stores.ts";
-import { Eid, RelayInfo, RelayStats, Pk, eventToNoteEvent, NoteEvent, parseClient } from "./models.ts";
+import { Eid, RelayInfo, RelayStats, Pk, eventToNoteEvent, NoteEvent, parseClient, Session } from "./models.ts";
 import { NestedNoteEvent } from "./nest.ts";
 import { medianOrZero, maxBy } from "./collections.ts";
 import { currentTime, MIN_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, SIX_HOURS_IN_SECS } from "./date-time.ts";
 import { errorText, parseContent, totalChildren } from "./ui.ts";
 import { updateBlockFilters, loadBlockFilters, applyBlock } from "./block-lists.ts";
-import { waitNostr } from "./nip07-awaiter.ts";
+import { waitNostr } from "nip07-awaiter";
 import { sha256 } from "@noble/hashes/sha256";
 import { bytesToHex } from "@noble/hashes/utils";
 
@@ -80,7 +80,7 @@ class PrioritizedPool {
     };
 
     let requestedFromProfile = false;
-    const loggedIn = signersStore.active && window.nostr;
+    const loggedIn = !!(signersStore.active && window.nostr);
     let externalRelays: RelayRecord = {};
 
     const reloadFromProfile = async () => {
@@ -126,7 +126,7 @@ class PrioritizedPool {
       : Object.fromEntries(
           (rawRelays || '')
             .split(',')
-            .map(r => [r, {read: true, write: !loggedIn}]));
+            .map(r => [r, {read: true, write: loggedIn}]));
 
     const relays: RelayRecord = Object.fromEntries(
       Object
@@ -714,40 +714,50 @@ export const loginIfKnownUser = async () => {
 export const manualLogin = async () => {
   if (signersStore.active) return signersStore.active;
 
+  let knownUser = false;
   let pk: Pk | undefined;
-  const sessions = await findAll('sessions', +false, { index: 'autoLogin' });
+  const sessions: Session[] = await findAll('sessions', +false, { index: 'autoLogin' });
   if (sessions.length > 0) {
     if (window.nostr) {
-      pk = await window.nostr!.getPublicKey();
+      console.log('[zapthreads] nip-07 became available, trying to re-enable auto-login');
+      try {
+        pk = await window.nostr!.getPublicKey();
+      } catch (err) {
+        console.error(err);
+        console.log('[zapthreads] cannot retrieve pubkey, removing old sessions');
+        // @ts-ignore
+        remove('sessions', sessions.map(s => s.pk));
+      }
       const session = sessions.find(s => s.pk === pk);
       if (session) {
-        if (store.onLogin && await store.onLogin({ knownUser: true })) {
-          console.log('[zapthreads] re-enabling auto-login');
-          signersStore.active = {
-            pk,
-            signEvent: async (event: UnsignedEvent) => await window.nostr!.signEvent(event),
-          };
-          save('sessions', { ...session, autoLogin: +true });
-        } else {
-          // @ts-ignore
-          remove('sessions', [pk]);
-        }
-        return;
+        knownUser = true;
+        console.log('[zapthreads] re-enabling auto-login');
       }
     } else {
-      console.log('[zapthreads] nip-07 is probably removed, disabling auto-login');
-      sessions.forEach(session => save('sessions', { ...session, autoLogin: +false }));
+      console.log('[zapthreads] nip-07 is probably removed');
+      const autoLoginSessions = await findAll('sessions', +false, { index: 'autoLogin' });
+      if (autoLoginSessions.length > 0)
+        console.log('[zapthreads] disabling auto-login');
+        autoLoginSessions.forEach(session => save('sessions', { ...session, autoLogin: +false }));
     }
   }
 
   const { accepted, autoLogin } = store.onLogin
-    ? await store.onLogin({ knownUser: false })
+    ? await store.onLogin({ knownUser })
     : { accepted: true, autoLogin: false };
-  if (!accepted) return;
+  if (!accepted) {
+    if (pk) {
+      console.log('[zapthreads] removing session', pk);
+      // @ts-ignore
+      remove('sessions', [pk]);
+    }
+    return;
+  }
 
   if (!window.nostr) {
     throw new Error('No NIP-07 extension!');
   }
+
   pk ||= await window.nostr!.getPublicKey();
 
   signersStore.active = {
@@ -759,8 +769,9 @@ export const manualLogin = async () => {
     console.error('User has no signer!');
   }
 
-  if (autoLogin) {
-    save('sessions', { pk, autoLogin: +(autoLogin === true) });
+  if (autoLogin === true || knownUser) {
+    console.log('[zapthreads] saving session');
+    save('sessions', { pk, autoLogin: +true });
   }
 
   await pool.updateRelays();

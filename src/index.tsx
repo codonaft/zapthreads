@@ -71,10 +71,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   });
 
   onMount(async () => {
-    window.addEventListener('beforenostrupdate', (e) => {
-      signersStore.active = undefined;
-    });
-
     if (signersStore.active) return;
     await loginIfKnownUser();
     await pool.updateRelays(props.relays);
