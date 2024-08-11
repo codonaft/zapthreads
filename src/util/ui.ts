@@ -183,11 +183,11 @@ export const generateTags = (content: string): string[][] => {
 
 export const parseUrlPrefixes = (value: string = '') => {
   const result: { [key in UrlPrefixesKeys]?: string; } = {
-    naddr: 'https://nostr.com/',
-    npub: 'https://nostr.com/',
-    nprofile: 'https://nostr.com/',
-    nevent: 'https://nostr.com/',
-    note: 'https://nostr.com/',
+    naddr: 'https://nostr.at/',
+    npub: 'https://nostr.at/',
+    nprofile: 'https://nostr.at/',
+    nevent: 'https://nostr.at/',
+    note: 'https://nostr.at/',
     tag: 'https://snort.social/t/'
   };
 

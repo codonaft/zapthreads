@@ -98,7 +98,7 @@ Arguments:
    - `relayInformation` (when disabled NIP-11 relay filtering is off)
    - `spamNostrBand`
  - `urls`: comma-separated pairs of URLs
-   - defaults to `naddr:nostr.com/,npub:nostr.com/,nprofile:nostr.com/,nevent:nostr.com/,note:nostr.com/,tag:snort.social/t/`
+   - defaults to `naddr:nostr.at/,npub:nostr.at/,nprofile:nostr.at/,nevent:nostr.at/,note:nostr.at/,tag:snort.social/t/`
    - `https://` will be automatically prepended
  - `language`: allowed language, no restrictions by default
    - ISO-639-1 two-letter code only

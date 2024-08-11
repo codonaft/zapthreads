@@ -30,7 +30,7 @@ describe("ui utils", () => {
       userStartedReadingComments: false,
       commentContexts: new Map,
       disableFeatures: [],
-      urlPrefixes: parseUrlPrefixes('naddr:nostr.com/,')
+      urlPrefixes: parseUrlPrefixes('naddr:nostr.at/,')
     });
 
     it('links naddr with title if mentioned', () => {
@@ -48,7 +48,7 @@ describe("ui utils", () => {
       };
 
       let result = parseContent(eventToNoteEvent(e), store);
-      expect(result).toEqual('<p>awesome article\n <a href="https://nostr.com/naddr1qqxnzd3cxqmrzv3exgmr2wfeqyf8wumn8ghj7ur4wfcxcetsv9njuetnqyxhwumn8ghj7mn0wvhxcmmvqy08wumn8ghj7mn0wd68yttjv4kxz7fwdehkkmm5v9ex7tnrdakszynhwden5te0danxvcmgv95kutnsw43qz9rhwden5te0wfjkccte9ejxzmt4wvhxjmcpzpmhxue69uhkummnw3ezuamfdejsygrwg6zz9hahfftnsup23q3mnv5pdz46hpj4l2ktdpfu6rhpthhwjvpsgqqqw4rskylmpy">@naddr1qq...lmpy</a></p>');
+      expect(result).toEqual('<p>awesome article\n <a href="https://nostr.at/naddr1qqxnzd3cxqmrzv3exgmr2wfeqyf8wumn8ghj7ur4wfcxcetsv9njuetnqyxhwumn8ghj7mn0wvhxcmmvqy08wumn8ghj7mn0wd68yttjv4kxz7fwdehkkmm5v9ex7tnrdakszynhwden5te0danxvcmgv95kutnsw43qz9rhwden5te0wfjkccte9ejxzmt4wvhxjmcpzpmhxue69uhkummnw3ezuamfdejsygrwg6zz9hahfftnsup23q3mnv5pdz46hpj4l2ktdpfu6rhpthhwjvpsgqqqw4rskylmpy">@naddr1qq...lmpy</a></p>');
     });
 
     it('parses a nostr url with a custom url prefix', () => {
@@ -60,7 +60,7 @@ describe("ui utils", () => {
         "content": "nostr:naddr1qqxnzd3cxqmrzv3exgmr2wfeqyf8wumn8ghj7ur4wfcxcetsv9njuetnqyxhwumn8ghj7mn0wvhxcmmvqy08wumn8ghj7mn0wd68yttjv4kxz7fwdehkkmm5v9ex7tnrdakszynhwden5te0danxvcmgv95kutnsw43qz9rhwden5te0wfjkccte9ejxzmt4wvhxjmcpzpmhxue69uhkummnw3ezuamfdejsygrwg6zz9hahfftnsup23q3mnv5pdz46hpj4l2ktdpfu6rhpthhwjvpsgqqqw4rskylmpy"
       };
       let result = parseContent(eventToNoteEvent(e), store);
-      expect(result).toMatch('<p><a href="https://nostr.com/naddr1qqxnzd3cxqmrzv');
+      expect(result).toMatch('<p><a href="https://nostr.at/naddr1qqxnzd3cxqmrzv');
 
       e.content = 'I love #Bitcoin';
       e.tags = [['t', 'Bitcoin']];
