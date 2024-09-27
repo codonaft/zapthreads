@@ -6,10 +6,12 @@ import { Profile, Eid, Pk } from "./models.ts";
 import { createMutable } from "solid-js/store";
 import { Accessor, Setter } from "solid-js";
 import { ReactiveSet } from "@solid-primitives/set";
-import { Signal } from "./solidjs.ts";
+import { newSignal, Signal } from "./solidjs.ts";
 import { NestedNoteEvent } from "./nest.ts";
 
 export const store = createMutable<PreferencesStore>({
+  ready: newSignal(false),
+
   readRelays: [],
   writeRelays: [],
   rootEventIds: [],
@@ -64,7 +66,7 @@ export type CommentContext = {
     trigger: () => void;
   },
   text: {
-    value: string;
+    value: Signal<string>;
     overflowed: Signal<boolean | undefined>;
     collapsed: Signal<boolean>;
   },
@@ -79,6 +81,8 @@ export type CommentContext = {
 };
 
 export type PreferencesStore = {
+  ready: Signal<boolean>,
+
   anchor?: Anchor, // derived from anchor prop
   readRelays: string[];
   writeRelays: string[];

@@ -24,6 +24,7 @@ import { applyBlock, updateBlockFilters, loadBlockFilters } from "./util/block-l
 import { validateAndSetLanguage } from "./util/language.ts";
 
 const ZapThreads = (props: { [key: string]: string; }) => {
+  const ready = () => store.ready();
   const minReadPow = () => +props.minReadPow;
   const maxWritePow = () => +props.maxWritePow;
 
@@ -93,8 +94,8 @@ const ZapThreads = (props: { [key: string]: string; }) => {
   }));
 
   // Anchors -> root events
-  createComputed(on([anchor, readRelays], async () => {
-    if (store.rootEventIds.length > 0 || anchor().type === 'error') return;
+  createComputed(on([anchor, readRelays, ready], async () => {
+    if (!ready() || store.rootEventIds.length > 0 || anchor().type === 'error') return;
 
     let filterForRemoteRootEvents: Filter;
     let localRootEvents: NoteEvent[];
@@ -485,3 +486,5 @@ ZapThreads.onReport = function (cb?: (event: {}) => Promise<{ accepted?: boolean
   store.onReport = cb;
   return ZapThreads;
 };
+
+ZapThreads.start = () => store.ready(true);

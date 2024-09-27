@@ -34,7 +34,6 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
       return result!;
     } else {
       const [threadCollapsed, setThreadCollapsed] = createSignal<boolean | undefined>();
-      const parsedContent = parseContent(event, store, articles());
       const commentContext = {
         thread: {
           collapsed: threadCollapsed,
@@ -42,7 +41,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
           trigger: () => setThreadCollapsed(!threadCollapsed()),
         },
         text: {
-          value: parsedContent,
+          value: newSignal(''),
           overflowed: newSignal<undefined | boolean>(undefined),
           collapsed: newSignal(true),
         },
@@ -68,7 +67,8 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
       let rank: number | undefined = 0;
       let valid = false;
       try {
-        const { upvotesCount, downvotesCount } = commentContext(e).votes;
+        const context = commentContext(e);
+        const { upvotesCount, downvotesCount } = context.votes;
         const validationResult = validateNestedNoteEvent({
           e,
           rankable,
@@ -76,6 +76,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
           upvotes: upvotesCount(),
           downvotes: downvotesCount(),
         });
+        context.text.value(parseContent(e, store)); // FIXME: remove this not not yet sanitized text without breaking "Read more" feature
         valid = true;
 
         if (rankable) {
@@ -121,7 +122,25 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
           createEffect(on([articles], () => {
             if (store.commentContexts.has(event().id)) {
               const updated = { ...context() };
-              updated.text.value = parseContent(event(), store, articles());
+
+              if (store.onEvent) {
+                const replies = totalChildren(event());
+                const content = parseContent(event(), store, articles());
+                const rankable = !!props.firstLevelComments;
+                const { sanitizedContent } = store.onEvent({
+                  rankable,
+                  kind: event().k,
+                  content,
+                  replies,
+                  upvotes: updated.votes.upvotesCount(),
+                  downvotes: updated.votes.downvotesCount(),
+                  client: event().client,
+                  language: event().language,
+                  pow: event().pow,
+                  followedByModerator: store.lists.pubkeysFollowed.has(event().pk),
+                });
+                updated.text.value(sanitizedContent || content);
+              }
               store.commentContexts.set(event().id, updated);
             }
           }));
@@ -255,7 +274,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               return;
             }
             const signer = s!;
-            if (signer && (!store.onRemove || (await store.onRemove!({ content: context().text.value })).accepted)) {
+            if (signer && (!store.onRemove || (await store.onRemove!({ content: context().text.value() })).accepted)) {
               const eid = event().id;
               const sentRequest = await signAndPublishEvent({
                 kind: EventDeletion,
@@ -374,7 +393,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               <div
                 ref={setRef}
                 classList={{ "ztr-comment-text": true, "ztr-comment-text-fade": overflowed() && context().text.collapsed(), "highlight": event().k == Highlights }}
-                innerHTML={context().text.value}>
+                innerHTML={context().text.value()}>
               </div>
 
               {overflowed() &&

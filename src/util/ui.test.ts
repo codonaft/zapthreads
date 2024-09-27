@@ -2,12 +2,14 @@ import { UnsignedEvent } from "nostr-tools/pure";
 import { parseContent, parseUrlPrefixes } from "./ui.ts";
 import { createMutable } from "solid-js/store";
 import { ReactiveSet } from "@solid-primitives/set";
+import { newSignal, trigger } from "./solidjs.ts";
 import { PreferencesStore } from "./stores.ts";
 import { eventToNoteEvent } from "./models.ts";
 
 describe("ui utils", () => {
   describe("parseContent", () => {
     const store = createMutable<PreferencesStore>({
+      ready: newSignal(false),
       readRelays: [],
       writeRelays: [],
       filter: {},

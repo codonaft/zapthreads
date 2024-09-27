@@ -72,6 +72,10 @@ node_modules/.bin/vite build
   relays="wss://relay.nostr.band,wss://nostr-pub.wellorder.net/"
   disable="likes,singleVoteCounter"
   />
+
+<script>
+ZapThreads.start();
+</script>
 ```
 
 Arguments:
@@ -181,6 +185,7 @@ ZapThreads
     }
     return { accepted: true };
   })
+  .start();
 ```
 
 ## Icons

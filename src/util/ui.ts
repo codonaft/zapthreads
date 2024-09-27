@@ -6,6 +6,7 @@ import { Event } from "nostr-tools/core";
 import { ShortTextNote, Metadata, Highlights, Reaction, Zap, Report, CommunityDefinition } from "nostr-tools/kinds";
 import { matchAll, replaceAll } from "nostr-tools/nip27";
 import { Remarkable } from 'remarkable';
+import { linkify } from 'remarkable/linkify';
 import { findAll, save } from "./db.ts";
 import { store } from "./stores.ts";
 import { NoteEvent, Profile, Pk, Eid, ReactionEvent } from "./models.ts";
@@ -144,7 +145,7 @@ export const parseContent = (e: NoteEvent, store: PreferencesStore, articles: No
     linkTarget: '_blank',
     typographer: true,
     quotes: e.language === 'ru' ? '«»‘’' : '“”‘’',
-  });
+  }).use(linkify);
 
   // Markdown => HTML
   return md.render(content.trim());
