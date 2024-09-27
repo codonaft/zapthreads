@@ -164,6 +164,9 @@ const loadModerators = async () => {
   if (community) {
     community.moderators.forEach(pk => store.moderators.add(pk));
   }
+  if (store.externalAuthor) {
+    store.moderators.add(store.externalAuthor);
+  }
 
   return lastUpdate;
 };

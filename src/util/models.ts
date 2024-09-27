@@ -3,6 +3,7 @@ import { parse } from "nostr-tools/nip10";
 import { RelayInformation } from "nostr-tools/nip11";
 import { UnsignedEvent } from "nostr-tools/pure";
 import { isValidLanguage } from "./language.ts";
+import { updateBlockFilters } from "./block-lists.ts";
 
 // models
 
@@ -252,6 +253,8 @@ export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion
   const pubkeysFollowed = db.createObjectStore('pubkeysFollowed', { keyPath: indices['pubkeysFollowed'] });
 
   const communities = db.createObjectStore('communities', { keyPath: indices['communities'] });
+
+  updateBlockFilters(0);
 };
 
 // util

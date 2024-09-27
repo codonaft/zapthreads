@@ -51,7 +51,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     })();
 
     if ((props.author || '').startsWith('npub')) {
-      store.externalAuthor = props.author;
+      store.externalAuthor = decode(props.author).data as string;
     }
 
     store.disableFeatures = props.disable.split(',').map(e => e.trim()).filter(isDisableType);

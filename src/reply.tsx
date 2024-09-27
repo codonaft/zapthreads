@@ -112,8 +112,7 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
 
     if (store.externalAuthor) {
       try {
-        const pubkey = decode(store.externalAuthor).data as string;
-        unsignedEvent.tags.push(['p', pubkey]);
+        unsignedEvent.tags.push(['p', store.externalAuthor]);
       } catch (_) { }
     }
 
