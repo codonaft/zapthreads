@@ -36,10 +36,13 @@ Some of the stuff I may work on later:
 - [ ] Faster NIP-13 PoW implementation
 - [ ] [Gossip](https://github.com/frnandu/yana/blob/master/GOSSIP.md) model
 - [ ] Turn all animated avatars into static pictures, animate them on hover only
+- [ ] Optional comment preview (GitHub-like)
 - Zaps
     - [ ] Zap comment
     - [ ] Rank comments by zaps
 - Moderation
+    - [x] Approve messages written by users that are followed by current user/author/moderator by default
+        - limited, may require page reload for now
     - [ ] Make moderated comments filtering instant
       - currently some lag is still possible
     - [ ] Blur images from comments reported as NSFW, unblur on hover
@@ -97,6 +100,7 @@ Arguments:
    - `hideContent` (when disabled it shows the content if the anchor is a naddr)
    - `relayInformation` (when disabled NIP-11 relay filtering is off)
    - `spamNostrBand`
+   - `followIsApproval`
  - `urls`: comma-separated pairs of URLs
    - defaults to `naddr:nostr.at/,npub:nostr.at/,nprofile:nostr.at/,nevent:nostr.at/,note:nostr.at/,tag:snort.social/t/`
    - `https://` will be automatically prepended
@@ -115,6 +119,8 @@ Arguments:
      - `min-read-pow`
      - current minimal pow of write relays limitations (unless `disable="relayInformation"` is set), bounded by `max-write-pow`
    - `anchor` difficulty is ignored, it can be `0`
+   - such message will be visible even with too low PoW if moderator/author/current user follows the commenter
+     - unless (`disable="followIsApproval"` is set)
 
 ## Customize
 
@@ -153,7 +159,7 @@ ZapThreads
   .onReport(async ({}) => {
     return { accepted: true, list: 'event', type: 'other', reason: '' };
   })
-  .onEvent(({ rankable, kind, content, replies, upvotes, downvotes, pow, language, client }) => {
+  .onEvent(({ rankable, kind, content, replies, upvotes, downvotes, pow, language, client, followedByModerator }) => {
     if (kind === 1 && content.includes('poker')) {
       throw new Error("No spamming please, we're discussing important things here");
     }

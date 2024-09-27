@@ -15,9 +15,10 @@ describe("ui utils", () => {
       writePowDifficulty: 0,
       minReadPow: 0,
       maxWritePow: 0,
-      blocks: {
-        events: new Set,
-        pubkeys: new Set,
+      lists: {
+        eventsBlocked: new Set,
+        pubkeysBlocked: new Set,
+        pubkeysFollowed: new Set,
         checkUpdates: true,
       },
       ranks: new Map,

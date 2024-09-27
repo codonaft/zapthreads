@@ -807,7 +807,8 @@ export const validateWriteEvent = (e: UnsignedEvent & { id: undefined } | Event,
       replies: 0,
       upvotes,
       downvotes,
-      pow: store.writePowDifficulty
+      pow: store.writePowDifficulty,
+      followedByModerator: store.lists.pubkeysFollowed.has(e.pubkey),
     })
     : { sanitizedContent: e.content, rank: undefined, showReportButton: false };
   return { ...result, noteEvent: undefined };
@@ -818,18 +819,20 @@ export const validateNestedNoteEvent = (args: { e: NestedNoteEvent; rankable: bo
   const replies = totalChildren(e);
   preValidate({ id: e.id, pubkey: e.pk, kind: e.k, powOrTags: e.pow, content: e.c }, minReadPow);
   const result = store.onEvent
-    ? store.onEvent({ rankable, kind: e.k, content: parseContent(e, store), replies, upvotes, downvotes, client: e.client, language: e.language, pow: e.pow })
+    ? store.onEvent({ rankable, kind: e.k, content: parseContent(e, store), replies, upvotes, downvotes, client: e.client, language: e.language, pow: e.pow, followedByModerator: store.lists.pubkeysFollowed.has(e.pk) })
     : { sanitizedContent: e.c, rank: undefined, showReportButton: false }
   return { ...result, noteEvent: e };
 };
 
 const preValidate = (e: { id: Eid | undefined; pubkey: Pk; kind: number; powOrTags: number | string[][]; content: string }, minReadPow?: number) => {
-  const blockedEvent = e.id && store.blocks.events.has(e.id);
+  if (!store.disableFeatures!.includes('followIsApproval') && store.lists.pubkeysFollowed.has(e.pubkey)) return;
+
+  const blockedEvent = e.id && store.lists.eventsBlocked.has(e.id);
   if (blockedEvent) {
     applyBlock('eventsBlocked', e.id!);
   }
 
-  const blockedPk = store.blocks.pubkeys.has(e.pubkey);
+  const blockedPk = store.lists.pubkeysBlocked.has(e.pubkey);
   if (blockedPk) {
     applyBlock('pubkeysBlocked', e.pubkey);
   }
@@ -840,7 +843,7 @@ const preValidate = (e: { id: Eid | undefined; pubkey: Pk; kind: number; powOrTa
   if (!e.content.trim() && e.content.length > store.maxCommentLength) throw new Error('Invalid message length');
 
   if (e.id !== undefined && minReadPow !== undefined && !powIsOk(e.id, e.powOrTags, minReadPow)) throw new Error('NIP-13 PoW is not okay');
-}
+};
 
 const filterCacheKey = (relayUrl: string, filter: Filter) => {
   const ignored = ['since', 'until', 'limit'];

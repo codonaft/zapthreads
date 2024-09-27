@@ -22,9 +22,10 @@ export const store = createMutable<PreferencesStore>({
   writePowDifficulty: 0,
   minReadPow: 0,
   maxWritePow: 0,
-  blocks: {
-    events: new Set,
-    pubkeys: new Set,
+  lists: {
+    eventsBlocked: new Set,
+    pubkeysBlocked: new Set,
+    pubkeysFollowed: new Set,
     checkUpdates: true,
   },
   ranks: new Map,
@@ -50,7 +51,7 @@ export type EventSigner = {
 
 export type UrlPrefixesKeys = 'naddr' | 'nevent' | 'note' | 'npub' | 'nprofile' | 'tag';
 
-const _types = ['reply', 'likes', 'votes', 'singleVoteCounter', 'zaps', 'publish', 'watch', 'hideContent', 'relayInformation', 'spamNostrBand'] as const;
+const _types = ['reply', 'likes', 'votes', 'singleVoteCounter', 'zaps', 'publish', 'watch', 'hideContent', 'relayInformation', 'spamNostrBand', 'followIsApproval'] as const;
 type DisableType = typeof _types[number];
 export const isDisableType = (type: string): type is DisableType => {
   return _types.includes(type as DisableType);
@@ -94,10 +95,11 @@ export type PreferencesStore = {
   writePowDifficulty: number;
   minReadPow: number;
   maxWritePow: number;
-  blocks: {
-    events: Set<Eid>;
-    pubkeys: Set<Pk>;
-    checkUpdates: boolean,
+  lists: {
+    eventsBlocked: Set<Eid>;
+    pubkeysBlocked: Set<Pk>;
+    pubkeysFollowed: Set<Pk>;
+    checkUpdates: boolean;
   };
   ranks: Map<Eid, number>,
   showReportButton: Set<Eid>;
@@ -113,7 +115,7 @@ export type PreferencesStore = {
   moderators: ReactiveSet<Pk>;
   profiles: () => Profile[];
   onLogin?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin?: boolean; }>;
-  onEvent?: (event: { rankable: boolean; kind: number; content: string; replies: number; upvotes: number; downvotes: number; pow: number; language?: string; client?: string; }) => { sanitizedContent?: string; rank?: number; showReportButton?: boolean; };
+  onEvent?: (event: { rankable: boolean; kind: number; content: string; replies: number; upvotes: number; downvotes: number; pow: number; followedByModerator: boolean; language?: string; client?: string; }) => { sanitizedContent?: string; rank?: number; showReportButton?: boolean; };
   onPublish?: (event: { relays: string[]; }) => Promise<{ accepted: boolean; }>;
   onRemove?: (event: { content: string; }) => Promise<{ accepted: boolean; }>;
   onReport?: (event: {}) => Promise<{ accepted?: boolean; list?: 'event' | 'pubkey'; type?: 'nudity' | 'malware' | 'profanity' | 'illegal' | 'spam' | 'impersonation' | 'other'; reason?: string; }>;

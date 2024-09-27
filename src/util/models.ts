@@ -106,6 +106,12 @@ export type Block = {
   reason?: string;
 };
 
+export type PubkeysFollowed = {
+  moderator: Pk;
+  pks: Pk[];
+  addedAt: number;
+};
+
 export type Community = {
   community: string;
   moderators: Pk[];
@@ -179,6 +185,10 @@ export interface ZapthreadsSchema extends DBSchema {
     key: string;
     value: Block;
   };
+  pubkeysFollowed: {
+    key: string;
+    value: PubkeysFollowed;
+  };
   communities: {
     key: string;
     value: Community;
@@ -197,11 +207,12 @@ export const indices: { [key in StoreNames<ZapthreadsSchema>]: any } = {
   'relayStats': ['name', 'kind', 'serial'],
   'eventsBlocked': 'id',
   'pubkeysBlocked': 'id',
+  'pubkeysFollowed': 'moderator',
   'communities': 'community',
 };
 
 export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion: number) => {
-  if (currentVersion <= 1) {
+  if (currentVersion <= 2) {
     const names = [...db.objectStoreNames];
     await Promise.all(names.map(n => db.deleteObjectStore(n)));
   }
@@ -237,6 +248,8 @@ export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion
   const pubkeysBlocked = db.createObjectStore('pubkeysBlocked', { keyPath: indices['pubkeysBlocked'] });
 
   const eventsBlocked = db.createObjectStore('eventsBlocked', { keyPath: indices['eventsBlocked'] });
+
+  const pubkeysFollowed = db.createObjectStore('pubkeysFollowed', { keyPath: indices['pubkeysFollowed'] });
 
   const communities = db.createObjectStore('communities', { keyPath: indices['communities'] });
 };

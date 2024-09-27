@@ -1,7 +1,7 @@
-import { ShortTextNote, Metadata, Mutelist, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
+import { ShortTextNote, Metadata, Mutelist, Contacts, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
 import { Filter } from "nostr-tools/filter";
 import { Event } from "nostr-tools/core";
-import { Block, BlockName, Eid, Pk } from "./models.ts";
+import { Block, BlockName, PubkeysFollowed, Eid, Pk } from "./models.ts";
 import { store, isDisableType, signersStore } from "./stores.ts";
 import { pool } from "./network.ts";
 import { find, findAll, save, remove } from "./db.ts";
@@ -10,46 +10,46 @@ import { shortFetch } from "./network.ts";
 
 export const applyBlock = async (list: BlockName, id: Eid | Pk, reason?: string) => {
   const block = await find(list, IDBKeyRange.only(id)) || { id, addedAt: currentTime(), used: false };
-  if (!block.used) {
-    let pubkeyBlock;
-    if (list === 'eventsBlocked') {
-      // check whether it's already blocked by pubkey first
-      const event = await find('events', IDBKeyRange.only(id));
-      if (event) {
-        pubkeyBlock = await find('pubkeysBlocked', IDBKeyRange.only(event!.pk));
-      }
-    }
+  if (block.used) return;
 
-    if (pubkeyBlock) {
-      save('pubkeysBlocked', { ...pubkeyBlock, used: true });
-    } else {
-      const newReason = block.reason || reason;
-      save(list, { ...block, used: true, reason: newReason });
+  let pubkeyBlock;
+  if (list === 'eventsBlocked') {
+    // check whether it's already blocked by pubkey first
+    const event = await find('events', IDBKeyRange.only(id));
+    if (event) {
+      pubkeyBlock = await find('pubkeysBlocked', IDBKeyRange.only(event!.pk));
     }
+  }
 
-    let blockedEids;
-    if (list === 'eventsBlocked') {
-      blockedEids = [id];
-    } else if (list === 'pubkeysBlocked') {
-      const blockedEvents = await findAll('events', id, { index: 'pk' });
-      blockedEids = blockedEvents.map(e => e.id);
-    }
+  if (pubkeyBlock) {
+    save('pubkeysBlocked', { ...pubkeyBlock, used: true });
+  } else {
+    const newReason = block.reason || reason;
+    save(list, { ...block, used: true, reason: newReason });
+  }
 
-    if (blockedEids) {
-      remove('events', blockedEids);
-    }
+  let blockedEids;
+  if (list === 'eventsBlocked') {
+    blockedEids = [id];
+  } else if (list === 'pubkeysBlocked') {
+    const blockedEvents = await findAll('events', id, { index: 'pk' });
+    blockedEids = blockedEvents.map(e => e.id);
+  }
+
+  if (blockedEids) {
+    remove('events', blockedEids);
   }
 };
 
-export const loadBlockFilters = async () => Math.max(await loadModerators(), await loadBlocked());
+export const loadBlockFilters = async () => Math.max(await loadModerators(), await loadBlocked(), await loadFollowed());
 
 export const updateBlockFilters = async (lastUpdateBlockFilters: number) => {
-  if (!store.blocks.checkUpdates) return;
-  store.blocks.checkUpdates = false;
+  if (!store.lists.checkUpdates) return;
+  store.lists.checkUpdates = false;
 
   await updateSpamNostrBand(lastUpdateBlockFilters);
   await updateCommunityModerators();
-  await updateModeratorBlocks();
+  await updateModeratorLists();
 
   console.log('[zapthreads] updated block-lists');
 };
@@ -84,9 +84,8 @@ const loadBlocked = async () => {
   const lists: BlockName[] = ['eventsBlocked', 'pubkeysBlocked'];
   const lastUpdate = Math.max(...await Promise.all(lists.map(
     async (list) => {
-      const view = list.replace('Blocked', '');
       // @ts-ignore
-      const fromStore = store.blocks[view];
+      const fromStore = store.lists[list];
       let lastUpdate = 0;
       const outdatedIds = [];
       const items: Block[] = await findAll(list);
@@ -106,6 +105,18 @@ const loadBlocked = async () => {
   return lastUpdate;
 };
 
+const loadFollowed = async () => {
+  const items: PubkeysFollowed[] = await findAll('pubkeysFollowed');
+  let lastUpdate = 0;
+  for (const i of items) {
+    if (lastUpdate < i.addedAt) {
+      lastUpdate = i.addedAt;
+    }
+    i.pks.forEach(pk => store.lists.pubkeysFollowed.add(pk));
+  }
+  return lastUpdate;
+};
+
 const updateSpamNostrBand = async (lastUpdateBlockFilters: number) => {
   if (store.disableFeatures!.includes('spamNostrBand')) return;
 
@@ -120,7 +131,7 @@ const updateSpamNostrBand = async (lastUpdateBlockFilters: number) => {
       const view = list.replace('Blocked', '');
       const request = shortFetch(`${API_METHOD}&view=${view}`);
       // @ts-ignore
-      const fromStore = store.blocks[view];
+      const fromStore = store.lists[list];
 
       const response = await request;
       if (response.status === 200) {
@@ -157,17 +168,27 @@ const loadModerators = async () => {
   return lastUpdate;
 };
 
-const updateModeratorBlocks = async () => {
+const updateModeratorLists = async () => {
   const lastUpdate = await loadModerators();
 
   const currentUser = signersStore.active ? [signersStore.active!.pk] : [];
   const authors = [...store.moderators, ...currentUser];
 
-  const events: Event[] = await pool.querySync(store.readRelays, { kinds: [Report, Mutelist], authors });
+  const events: Event[] = await pool.querySync(store.readRelays, { kinds: [Report, Mutelist, Contacts], authors });
+
   events.forEach(e => {
     if (e.kind === Report) processReport(e.tags);
     else if (e.kind === Mutelist) processMutelist(e.tags);
   });
+
+  const contacts = new Map<Pk, Event>();
+  events.filter(e => e.kind === Contacts).forEach(e => {
+    const old = contacts.get(e.pubkey);
+    if (!old || e.created_at > old.created_at) {
+      contacts.set(e.pubkey, e);
+    }
+  });
+  [...contacts.values()].forEach(e => processContacts(e));
 };
 
 const processReport = (tags: string[][]) => {
@@ -191,4 +212,15 @@ const processMutelist = (tags: string[][]) => {
   const events = entries.filter(t => t[0] === 'e').map(t => t[1]);
   pubkeys.forEach(pk => applyBlock('pubkeysBlocked', pk, 'Mute-listed user'));
   events.forEach(eid => applyBlock('eventsBlocked', eid, 'Mute-listed event'));
+};
+
+const processContacts = (e: Event) => {
+  const entries = e.tags.filter(i => i.length >= 2);
+  const pks = entries.filter(t => t[0] === 'p').map(t => t[1]);
+  save('pubkeysFollowed', {
+    moderator: e.pubkey,
+    pks,
+    addedAt: e.created_at,
+  });
+  pks.forEach(pk => store.lists.pubkeysFollowed.add(pk));
 };
