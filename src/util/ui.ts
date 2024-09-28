@@ -10,7 +10,7 @@ import { linkify } from 'remarkable/linkify';
 import { findAll, save } from "./db.ts";
 import { store } from "./stores.ts";
 import { NoteEvent, Profile, Pk, Eid, ReactionEvent } from "./models.ts";
-import { pool, rankRelays, PROFILE_RELAYS } from "./network.ts";
+import { pool, rankRelays, PROFILE_RELAYS, manualLogin } from "./network.ts";
 import { currentTime } from "./date-time.ts";
 
 // Misc profile helpers
@@ -238,4 +238,12 @@ export const normalizeURL = (url: string, removeSlashes: boolean = true): string
 export const errorText = <T>(exception: T) => {
   const err = (exception as any);
   return err?.message || String(err?.reason);
+};
+
+export const getSigner = async () => {
+  try {
+    return await manualLogin();
+  } catch (e) {
+    console.error(errorText(e));
+  }
 };

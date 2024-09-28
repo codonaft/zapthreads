@@ -259,6 +259,7 @@ export const RootComment = () => {
             <span>{satsAbbrev(zapCount())} sats</span>
           </li>
         </Show>
+        {/*<Votes votes={props.votes} event={event} voteCounts={voteCounts} />*/}
       </ul>
       <ReplyEditor comment={comment} />
     </div>
