@@ -191,6 +191,7 @@ ZapThreads
 
 ## Icons
 - [Font Awesome](https://fontawesome.com/license/free)
+- [Phosphoricons](https://phosphoricons.com/)
 
 ## LICENSE
 

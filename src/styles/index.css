@@ -545,9 +545,16 @@ li.ztr-comment-action-votes {
 }
 
 .ztr-comment-new .ztr-comment-actions {
-  font-size: 1.5em;
+  font-size: 2em;
   padding: 0;
   justify-content: center;
+  span {
+    font-size: 0.5em;
+  }
+  li.ztr-comment-action-votes {
+    padding-left: 0.6em;
+    padding-right: 0.6em;
+  }
 }
 
 .ztr-spinner .path {
@@ -566,7 +573,7 @@ svg {
 }
 
 ul.ztr-comment-actions li span {
-  padding: 0.25em 0.25em 0 0.25em;
+  padding: 0.25em;
   color: var(--ztr-icon-color, #6d6d6d);
 }
 
