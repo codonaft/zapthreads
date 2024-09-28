@@ -23,7 +23,8 @@ Test it here: https://codonaft.com/improved-zapthreads
 - [x] Bugfixes and performance optimizations
 
 Some of the stuff I may work on later:
-- [ ] Voting for author's root post
+- [x] Voting for author's root post
+    - for non-`http` anchors only
 - [ ] Label author's answers and reactions with avatar, similar to YouTube
 - [ ] (API for) Logout button
 - [ ] (API for) Follow author's profile button
@@ -38,18 +39,18 @@ Some of the stuff I may work on later:
 - [ ] Turn all animated avatars into static pictures, animate them on hover only
 - [ ] Optional comment preview (GitHub-like)
 - Zaps
-    - [ ] Zap comment
-    - [ ] Rank comments by zaps
+  - [ ] Zap comment
+  - [ ] Rank comments by zaps
 - Moderation
-    - [x] Approve messages written by users that are followed by current user/author/moderator by default
-        - limited, may require page reload for now
-    - [ ] Make moderated comments filtering instant
-      - currently some lag is still possible
-    - [ ] Blur images from comments reported as NSFW, unblur on hover
-    - [ ] Blur avatars from users reported as NSFW, unblur on hover
-    - [ ] Show comments with a negative vote rating more transparent
-      - the lower the rating—the lower opacity
-      - normal opacity on hover
+  - [x] Approve messages written by users that are followed by current user/author/moderator by default
+      - limited, may require page reload for now
+  - [ ] Make moderated comments filtering instant
+    - currently some lag is still possible
+  - [ ] Blur images from comments reported as NSFW, unblur on hover
+  - [ ] Blur avatars from users reported as NSFW, unblur on hover
+  - [ ] Show comments with a negative vote rating more transparent
+    - the lower the rating—the lower opacity
+    - normal opacity on hover
 
 Your [⚡zaps](https://codonaft.com/sponsor) help me allocate time on these! 🙏🏼
 

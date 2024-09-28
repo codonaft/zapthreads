@@ -8,9 +8,10 @@ import { generateSecretKey, getPublicKey, getEventHash, finalizeEvent } from "no
 import { Metadata, ShortTextNote, EventDeletion, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
 import { createAutofocus } from "@solid-primitives/autofocus";
 import { find, save, watch } from "./util/db.ts";
-import { Profile, eventToNoteEvent } from "./util/models.ts";
+import { Profile, eventToNoteEvent, ReactionEvent } from "./util/models.ts";
 import { Signal, newSignal } from "./util/solidjs.ts";
 import { lightningSvg, likeSvg, nostrSvg, warningSvg } from "./thread.tsx";
+import { Votes } from "./votes.tsx";
 import { decode, npubEncode } from "nostr-tools/nip19";
 import { Relay } from "nostr-tools/relay";
 import { normalizeURL } from "nostr-tools/utils";
@@ -235,7 +236,9 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
   </div>;
 };
 
-export const RootComment = () => {
+export const RootComment = (props: {
+  votes: () => ReactionEvent[];
+}) => {
   const anchor = () => store.anchor!;
 
   const zapsAggregate = watch(() => ['aggregates', IDBKeyRange.only([anchor().value, 9735])]);
@@ -243,6 +246,15 @@ export const RootComment = () => {
   const zapCount = () => zapsAggregate()?.sum ?? 0;
   const likeCount = () => likesAggregate()?.ids.length ?? 0;
   const comment = newSignal('');
+
+  const upvotesCount = newSignal(0);
+  const downvotesCount = newSignal(0);
+  const voteCounts = () => { return {
+    upvotesCount,
+    downvotesCount,
+  } };
+
+  const rootEventId = () => anchor().value!;
 
   return <div class="ztr-comment-new">
     <div class="ztr-comment-body">
@@ -259,7 +271,7 @@ export const RootComment = () => {
             <span>{satsAbbrev(zapCount())} sats</span>
           </li>
         </Show>
-        {/*<Votes votes={props.votes} event={event} voteCounts={voteCounts} />*/}
+        {['note', 'naddr'].includes(anchor().type) && <Votes eventId={rootEventId} rootEventId={rootEventId} voteCounts={voteCounts} votes={props.votes} />}
       </ul>
       <ReplyEditor comment={comment} />
     </div>

@@ -384,9 +384,9 @@ li.ztr-comment-action-like {
 li.ztr-comment-action-votes {
   justify-content: center;
   span {
-    margin-left: -0.7em;
-    margin-right: -0.7em;
-    font-size: 0.85em;
+    margin-left: -1.25em;
+    margin-right: -1.25em;
+    font-size: 0.7em;
   }
 }
 
@@ -545,8 +545,9 @@ li.ztr-comment-action-votes {
 }
 
 .ztr-comment-new .ztr-comment-actions {
-  font-size: 1.1em;
+  font-size: 1.5em;
   padding: 0;
+  justify-content: center;
 }
 
 .ztr-spinner .path {

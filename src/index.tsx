@@ -411,7 +411,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
         </div>
       </>}
       {anchor().type !== 'error' && <>
-        {!store.disableFeatures!.includes('reply') && <RootComment />}
+        {!store.disableFeatures!.includes('reply') && <RootComment votes={votes} />}
         <h2 id="ztr-title">
           {commentsLength() > 0 && `${commentsLength()} comment${commentsLength() == 1 ? '' : 's'}`}
         </h2>
