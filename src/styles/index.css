@@ -462,7 +462,7 @@ li.ztr-comment-action-votes {
 .ztr-reply-login-button {
   color: var(--ztr-action-color, #96609c);
   background-color: white;
-  border: 1px solid var(--ztr-action-color, #96609c);
+  border: 2px solid var(--ztr-action-color, #96609c);
 }
 
 .ztr-reply-login-button svg {
@@ -479,7 +479,7 @@ li.ztr-comment-action-votes {
   color: var(--ztr-text-color);
   display: flex;
   align-items: center;
-  border: 1px solid transparent;
+  border: 2px solid transparent;
 }
 
 .ztr-info-pane {
@@ -510,6 +510,41 @@ li.ztr-comment-action-votes {
   animation: dash 1.5s ease-in-out infinite;
 }
 
+.ztr-comment-subscribe-button {
+  font-family: var(--ztr-font);
+  appearance: none;
+  padding: 0.5em 1.4em;
+  width: 9em;
+  min-height: 3em;
+  border-radius: 1.4rem;
+  font-size: 0.5em;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+
+  margin-right: 2em;
+  margin-top: 1em;
+  margin-bottom: 1em;
+
+  color: var(--ztr-icon-color, #6d6d6d);
+  background-color: white;
+  border: 3px solid var(--ztr-icon-color, #6d6d6d);
+}
+
+.ztr-comment-subscribe-button:hover, .ztr-comment-subscribe-button.selected {
+  color: white;
+  background-color: var(--ztr-action-color, #96609c);
+  border: 3px solid var(--ztr-action-color, #96609c);
+}
+
+.ztr-comment-subscribe-button.selected:hover {
+  color: var(--ztr-action-color, #96609c);
+  background-color: white;
+  border: 3px solid var(--ztr-action-color, #96609c);
+}
+
 @keyframes rotate {
   100% {
     transform: rotate(360deg);
@@ -536,7 +571,7 @@ li.ztr-comment-action-votes {
 /* new */
 
 .ztr-comment-new .ztr-reply-form {
-  margin: 0.5em 0;
+  margin: 0;
   padding: 0;
 }
 

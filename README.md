@@ -27,7 +27,7 @@ Some of the stuff I may work on later:
     - for non-`http` anchors only
 - [ ] Label author's answers and reactions with avatar, similar to YouTube
 - [ ] (API for) Logout button
-- [ ] (API for) Follow author's profile button
+- [x] Follow author's profile button
 - [ ] Show Report button when hovering on comment only
 - [ ] Button that resends your comment to the previously failed relays
 - [ ] Rank by reports from other users

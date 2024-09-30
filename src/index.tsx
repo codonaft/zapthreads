@@ -4,7 +4,7 @@ import { createVisibilityObserver } from "@solid-primitives/intersection-observe
 import style from './styles/index.css?raw';
 import { updateProfiles, totalChildren, parseUrlPrefixes, parseContent, normalizeURL, errorText } from "./util/ui.ts";
 import { normalizeURL as nostrNormalizeURL } from "nostr-tools/utils";
-import { fetchRelayInformation, infoExpired, powIsOk, pool, loginIfKnownUser, NOTE_KINDS, CONTENT_KINDS, validateWriteEvent } from "./util/network.ts";
+import { fetchRelayInformation, infoExpired, powIsOk, pool, loginIfKnownUser, NOTE_KINDS, CONTENT_KINDS, validateWriteEvent, fetchContactsAndUpdateSubscribed } from "./util/network.ts";
 import { nest } from "./util/nest.ts";
 import { store, isDisableType, signersStore } from "./util/stores.ts";
 import { HOUR_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, sortByDate, currentTime } from "./util/date-time.ts";
@@ -15,7 +15,7 @@ import { clear as clearCache, find, findAll, save, remove, watchAll, onSaved } f
 import { decode, npubEncode } from "nostr-tools/nip19";
 import { RelayRecord } from "nostr-tools/relay";
 import { Event } from "nostr-tools/core";
-import { Metadata, ShortTextNote, LongFormArticle, EventDeletion, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
+import { Metadata, ShortTextNote, LongFormArticle, EventDeletion, Highlights, Reaction, Report, CommunityDefinition, Zap, Contacts } from "nostr-tools/kinds";
 import { finalizeEvent, getPublicKey, UnsignedEvent  } from "nostr-tools/pure";
 import { Filter } from "nostr-tools/filter";
 import { SubCloser } from "nostr-tools/pool";
@@ -301,6 +301,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
           onSaved(async () => {
             await pool.estimateWriteRelayLatencies();
             await updateBlockFilters(lastUpdateBlockFilters);
+            await fetchContactsAndUpdateSubscribed();
             await pool.updateRelayInfos();
 
             if (closeOnEose()) {

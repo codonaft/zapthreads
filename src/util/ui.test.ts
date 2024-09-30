@@ -26,6 +26,7 @@ describe("ui utils", () => {
       ranks: new Map,
       showReportButton: new Set,
       moderators: new ReactiveSet,
+      subscribed: newSignal(false),
       profiles: () => [],
       rootEventIds: [],
       topRootEventIds: new Set,

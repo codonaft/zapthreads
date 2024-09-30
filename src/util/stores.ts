@@ -34,6 +34,7 @@ export const store = createMutable<PreferencesStore>({
   showReportButton: new Set,
   moderators: new ReactiveSet,
 
+  subscribed: newSignal(false),
   filter: {},
   profiles: () => [],
 });
@@ -117,6 +118,8 @@ export type PreferencesStore = {
   anchorAuthor?: string;
   community?: string;
   moderators: ReactiveSet<Pk>;
+
+  subscribed: Signal<boolean>;
   profiles: () => Profile[];
   onLogin?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin?: boolean; }>;
   onEvent?: (event: { rankable: boolean; kind: number; content: string; replies: number; upvotes: number; downvotes: number; pow: number; followedByModerator: boolean; language?: string; client?: string; }) => { sanitizedContent?: string; rank?: number; showReportButton?: boolean; };

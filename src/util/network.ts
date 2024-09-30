@@ -6,7 +6,7 @@ import { SubCloser, AbstractPoolConstructorOptions, SubscribeManyParams as Subsc
 import { AbstractRelay as AbstractRelay, SubscriptionParams, Subscription, type AbstractRelayConstructorOptions } from "nostr-tools/abstract-relay";
 import { getEventHash, verifyEvent } from "nostr-tools/pure";
 import { Relay, RelayRecord } from "nostr-tools/relay";
-import { ShortTextNote, Metadata, Highlights, Reaction, Report, CommunityDefinition, Zap, RelayList } from "nostr-tools/kinds";
+import { ShortTextNote, Metadata, Highlights, Reaction, Report, CommunityDefinition, Zap, RelayList, Contacts } from "nostr-tools/kinds";
 import { RelayInformation } from "nostr-tools/nip11";
 import { getPow, minePow } from "nostr-tools/nip13";
 import { npubEncode } from "nostr-tools/nip19";
@@ -16,7 +16,7 @@ import { Eid, RelayInfo, RelayStats, Pk, eventToNoteEvent, NoteEvent, parseClien
 import { NestedNoteEvent } from "./nest.ts";
 import { medianOrZero, maxBy } from "./collections.ts";
 import { currentTime, MIN_IN_SECS, DAY_IN_SECS, WEEK_IN_SECS, SIX_HOURS_IN_SECS } from "./date-time.ts";
-import { errorText, parseContent, totalChildren } from "./ui.ts";
+import { errorText, parseContent, totalChildren, getSigner } from "./ui.ts";
 import { updateBlockFilters, loadBlockFilters, applyBlock } from "./block-lists.ts";
 import { waitNostr } from "nip07-awaiter";
 import { sha256 } from "@noble/hashes/sha256";
@@ -450,7 +450,7 @@ class PrioritizedPool {
   }
 
   private async getSince(relayUrl: string, filter: Filter) {
-    if (filter.since) return filter.since!;
+    if (filter.since !== undefined) return filter.since!;
     if (!store.anchor) return 0;
 
     const key = filterCacheKey(relayUrl, filter);
@@ -467,7 +467,7 @@ class PrioritizedPool {
   }
 
   private saveSince(relayUrl: string, filter: Filter, ts: number) {
-    if (!store.anchor || filter.kinds?.includes(Metadata)) return;
+    if (!store.anchor || filter.kinds?.filter(k => [Contacts, Metadata].includes(k))) return;
     const key = filterCacheKey(relayUrl, filter);
     const since = Math.max(this.eventsTs[key] || 0, ts);
     this.eventsTs[key] = since;
@@ -709,6 +709,8 @@ export const loginIfKnownUser = async () => {
     pk: pubkey,
     signEvent: async (event: UnsignedEvent) => await nostr.signEvent(event),
   };
+
+  store.subscribed(session.subscriber);
 };
 
 export const manualLogin = async () => {
@@ -727,18 +729,20 @@ export const manualLogin = async () => {
         console.log('[zapthreads] cannot retrieve pubkey, removing old sessions');
         // @ts-ignore
         remove('sessions', sessions.map(s => s.pk));
+        store.subscribed(false);
       }
       const session = sessions.find(s => s.pk === pk);
       if (session) {
         knownUser = true;
         console.log('[zapthreads] re-enabling auto-login');
+        store.subscribed(session.subscriber);
       }
     } else {
       console.log('[zapthreads] nip-07 is probably removed');
       const autoLoginSessions = await findAll('sessions', +false, { index: 'autoLogin' });
-      if (autoLoginSessions.length > 0)
-        console.log('[zapthreads] disabling auto-login');
-        autoLoginSessions.forEach(session => save('sessions', { ...session, autoLogin: +false }));
+      if (autoLoginSessions.length > 0) console.log('[zapthreads] disabling auto-login');
+      autoLoginSessions.forEach(session => save('sessions', { ...session, autoLogin: +false }));
+      store.subscribed(false);
     }
   }
 
@@ -750,6 +754,7 @@ export const manualLogin = async () => {
       console.log('[zapthreads] removing session', pk);
       // @ts-ignore
       remove('sessions', [pk]);
+      store.subscribed(false);
     }
     return;
   }
@@ -771,7 +776,11 @@ export const manualLogin = async () => {
 
   if (autoLogin === true || knownUser) {
     console.log('[zapthreads] saving session');
-    save('sessions', { pk, autoLogin: +true });
+    save('sessions', {
+      pk,
+      autoLogin: +true,
+      subscriber: store.subscribed(),
+    });
   }
 
   await pool.updateRelays();
@@ -785,6 +794,7 @@ export const logout = async () => {
   if (pk) {
     // @ts-ignore
     remove('sessions', [pk]);
+    store.subscribed(false);
   }
   signersStore.active = undefined;
 };
@@ -853,4 +863,81 @@ const filterCacheKey = (relayUrl: string, filter: Filter) => {
    .sort());
   const items = [relayUrl, store.anchor!.value, value];
   return bytesToHex(sha256(JSON.stringify(items)));
+};
+
+export const fetchContactsAndUpdateSubscribed = async (): Promise<Event | undefined> => {
+  if (!signersStore.active) return;
+  const authorPk = store.externalAuthor || store.anchorAuthor;
+  if (!authorPk) return;
+
+  const events: Event[] = await pool.querySync(store.readRelays, { kinds: [Contacts], authors: [signersStore.active!.pk], until: Infinity });
+  let contacts: Event | undefined;
+  events.forEach(e => {
+    if (!contacts || e.created_at > contacts.created_at) {
+      contacts = e;
+    }
+  });
+  if (!contacts) return;
+
+  const subscribed = contacts
+    .tags
+    .filter(i => i.length >= 2 && i[0] === 'p')
+    .map(t => t[1])
+    .reverse()
+    .includes(authorPk!);
+  store.subscribed(subscribed);
+
+  await updateSubscribed();
+  return contacts;
+};
+
+export const toggleSubscribe = async () => {
+  const signer = await getSigner();
+  const authorPk = store.externalAuthor || store.anchorAuthor;
+  if (!signer || !authorPk) return;
+  const wasSubscribed = store.subscribed();
+  const contacts = await fetchContactsAndUpdateSubscribed();
+  if (store.subscribed() !== wasSubscribed) {
+    console.log('[zapthreads] already toggled subscription');
+    return;
+  }
+
+  const tags = contacts ? contacts.tags : [];
+  if (wasSubscribed) {
+    const index = tags.findIndex(i => i.length >= 2 && i[0] === 'p' && i[1] === authorPk!);
+    tags.splice(index, 1);
+  } else {
+    tags.push(['p', authorPk!]);
+  }
+
+  const unsignedEvent = {
+    kind: Contacts,
+    created_at: currentTime(),
+    content: '',
+    pubkey: signer.pk,
+    tags,
+  };
+
+  const id = getEventHash(unsignedEvent);
+  const signature = await signer.signEvent!(unsignedEvent);
+  const event = { id, ...unsignedEvent, ...signature };
+  console.log(JSON.stringify(event, null, 2));
+  const { ok, failures } = await pool.publishEvent(event);
+  if (ok > 0) {
+    store.subscribed(!wasSubscribed);
+  }
+
+  await updateSubscribed();
+  console.log('[zapthreads] subscribed', store.subscribed());
+};
+
+const updateSubscribed = async () => {
+  const subscribed = store.subscribed();
+  const session = await find('sessions', IDBKeyRange.only(signersStore.active!.pk));
+  if (session && session.subscriber !== subscribed) {
+    save('sessions', {
+      ...session,
+      subscriber: subscribed,
+    });
+  }
 };

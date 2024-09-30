@@ -1,11 +1,11 @@
-import { defaultPicture, generateTags, satsAbbrev, shortenEncodedId, updateProfiles, errorText } from "./util/ui.ts";
-import { signAndPublishEvent, sign, pool, manualLogin, logout, validateWriteEvent } from "./util/network.ts";
+import { defaultPicture, generateTags, satsAbbrev, shortenEncodedId, updateProfiles, errorText, getSigner } from "./util/ui.ts";
+import { signAndPublishEvent, sign, pool, manualLogin, logout, validateWriteEvent, toggleSubscribe } from "./util/network.ts";
 import { Show, createEffect, createSignal } from "solid-js";
 import { UnsignedEvent, Event } from "nostr-tools/core";
 import { EventSigner, signersStore, store } from "./util/stores.ts";
 import { currentTime } from "./util/date-time.ts";
 import { generateSecretKey, getPublicKey, getEventHash, finalizeEvent } from "nostr-tools/pure";
-import { Metadata, ShortTextNote, EventDeletion, Highlights, Reaction, Report, CommunityDefinition, Zap } from "nostr-tools/kinds";
+import { Metadata, ShortTextNote, EventDeletion, Highlights, Reaction, Report, CommunityDefinition, Zap, Contacts } from "nostr-tools/kinds";
 import { createAutofocus } from "@solid-primitives/autofocus";
 import { find, save, watch } from "./util/db.ts";
 import { Profile, eventToNoteEvent, ReactionEvent } from "./util/models.ts";
@@ -256,6 +256,9 @@ export const RootComment = (props: {
 
   const rootEventId = () => anchor().value!;
 
+  const subscribeButtonHover = newSignal(false);
+  const subscribeButtonText = () => store.subscribed() ? (subscribeButtonHover() ? 'Unsubscribe?' : 'Subscribed') : 'Subscribe';
+
   return <div class="ztr-comment-new">
     <div class="ztr-comment-body">
       <ul class="ztr-comment-actions">
@@ -271,6 +274,13 @@ export const RootComment = (props: {
             <span>{satsAbbrev(zapCount())} sats</span>
           </li>
         </Show>
+        <button class="ztr-comment-subscribe-button"
+          classList={{selected: store.subscribed()}}
+          onmouseenter={() => subscribeButtonHover(true)}
+          onmouseleave={() => subscribeButtonHover(false)}
+          onClick={() => toggleSubscribe()}>
+          {subscribeButtonText()}
+        </button>
         {['note', 'naddr'].includes(anchor().type) && <Votes eventId={rootEventId} rootEventId={rootEventId} voteCounts={voteCounts} votes={props.votes} />}
       </ul>
       <ReplyEditor comment={comment} />

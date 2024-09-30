@@ -71,6 +71,7 @@ export type Profile = {
 export type Session = {
   pk: Pk;
   autoLogin: number;
+  subscriber: boolean;
 };
 
 export type ProfileRelays = {
@@ -213,7 +214,7 @@ export const indices: { [key in StoreNames<ZapthreadsSchema>]: any } = {
 };
 
 export const upgrade = async (db: IDBPDatabase<ZapthreadsSchema>, currentVersion: number) => {
-  if (currentVersion <= 2) {
+  if (currentVersion <= 3) {
     const names = [...db.objectStoreNames];
     await Promise.all(names.map(n => db.deleteObjectStore(n)));
   }
