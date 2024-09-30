@@ -52,7 +52,7 @@ export type EventSigner = {
   signEvent?: SignEvent;
 };
 
-export type UrlPrefixesKeys = 'naddr' | 'nevent' | 'note' | 'npub' | 'nprofile' | 'tag';
+export type UrlPrefixesKeys = 'naddr' | 'nevent' | 'note' | 'npub' | 'nprofile' | 'tag' | 'picture';
 
 const _types = ['reply', 'likes', 'votes', 'singleVoteCounter', 'zaps', 'publish', 'watch', 'hideContent', 'relayInformation', 'spamNostrBand', 'followIsApproval'] as const;
 type DisableType = typeof _types[number];

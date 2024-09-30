@@ -189,7 +189,8 @@ export const parseUrlPrefixes = (value: string = '') => {
     nprofile: 'https://nostr.at/',
     nevent: 'https://nostr.at/',
     note: 'https://nostr.at/',
-    tag: 'https://snort.social/t/'
+    tag: 'https://snort.social/t/',
+    picture: 'https://robohash.org/?set=set4',
   };
 
   for (const pair of value.split(',')) {

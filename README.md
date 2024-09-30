@@ -38,6 +38,7 @@ Some of the stuff I may work on later:
 - [ ] [Gossip](https://github.com/frnandu/yana/blob/master/GOSSIP.md) model
 - [ ] Turn all animated avatars into static pictures, animate them on hover only
 - [ ] Optional comment preview (GitHub-like)
+- [x] Use robohash as profile picture placeholder
 - Zaps
   - [ ] Zap comment
   - [ ] Rank comments by zaps
@@ -107,7 +108,7 @@ Arguments:
    - `spamNostrBand`
    - `followIsApproval`
  - `urls`: comma-separated pairs of URLs
-   - defaults to `naddr:nostr.at/,npub:nostr.at/,nprofile:nostr.at/,nevent:nostr.at/,note:nostr.at/,tag:snort.social/t/`
+   - defaults to `naddr:nostr.at/,npub:nostr.at/,nprofile:nostr.at/,nevent:nostr.at/,note:nostr.at/,tag:snort.social/t/,picture:robohash.org/?set=set4`
    - `https://` will be automatically prepended
  - `language`: allowed language, no restrictions by default
    - ISO-639-1 two-letter code only

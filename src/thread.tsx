@@ -232,8 +232,16 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
           const npub = () => npubEncode(pubkey());
           const profile = () => profiles().find(p => p.pk === pubkey());
 
+          const picturePlaceholder = () => {
+            const p = store.urlPrefixes!.picture;
+            if (!p) return;
+            const url = new URL(p);
+            url.pathname = npub();
+            return url.href;
+          };
+
           createEffect(async () => {
-            profilePicture(profile()?.i || defaultPicture);
+            profilePicture(profile()?.i || picturePlaceholder() || defaultPicture);
           });
 
           // Update createdAt every minute
