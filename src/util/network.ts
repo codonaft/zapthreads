@@ -6,7 +6,7 @@ import { SubCloser, AbstractPoolConstructorOptions, SubscribeManyParams as Subsc
 import { AbstractRelay as AbstractRelay, SubscriptionParams, Subscription, type AbstractRelayConstructorOptions } from "nostr-tools/abstract-relay";
 import { getEventHash, verifyEvent } from "nostr-tools/pure";
 import { Relay, RelayRecord } from "nostr-tools/relay";
-import { ShortTextNote, Metadata, Highlights, Reaction, Report, CommunityDefinition, Zap, RelayList, Contacts } from "nostr-tools/kinds";
+import { ShortTextNote, Metadata, Highlights, Reaction, Report, CommunityDefinition, Zap, RelayList, Contacts, Mutelist, isReplaceableKind } from "nostr-tools/kinds";
 import { RelayInformation } from "nostr-tools/nip11";
 import { getPow, minePow } from "nostr-tools/nip13";
 import { npubEncode } from "nostr-tools/nip19";
@@ -85,8 +85,7 @@ class PrioritizedPool {
 
     const reloadFromProfile = async () => {
       const pk = signersStore.active!.pk;
-      const events = await this.querySync([...store.readRelays, ...PROFILE_RELAYS], { authors: [pk], kinds: [RelayList] });
-      const lastEvent = maxBy(events, e => e.created_at);
+      const lastEvent = await this.querySyncLast([...store.readRelays, ...PROFILE_RELAYS], { authors: [pk], kinds: [RelayList] });
       const tags = lastEvent ? lastEvent.tags : [];
       const externalRelays = Object.fromEntries(
        tags
@@ -328,6 +327,15 @@ class PrioritizedPool {
     })
   }
 
+  async querySyncLast(
+    relays: string[],
+    filter: Filter,
+    params?: Pick<SubscribeManyParams, 'id' | 'maxWait'>,
+  ): Promise<Event | undefined> {
+    const events = await this.querySync(relays, filter, params);
+    return maxBy(events, e => e.created_at);
+  }
+
   async publishEvent(event: Event): Promise<{ ok: number, failures: number }> {
     let writeRelays = store.writeRelays;
     if (writeRelays.length === 0) {
@@ -471,7 +479,7 @@ class PrioritizedPool {
   }
 
   private saveSince(relayUrl: string, filter: Filter, ts: number) {
-    if (!store.anchor || filter.kinds?.filter(k => [Contacts, Metadata].includes(k))) return;
+    if (!store.anchor || filter.kinds?.filter(k => isReplaceableKind(k))) return;
     const key = filterCacheKey(relayUrl, filter);
     const since = Math.max(this.eventsTs[key] || 0, ts);
     this.eventsTs[key] = since;
@@ -874,13 +882,7 @@ export const fetchContactsAndUpdateSubscribed = async (): Promise<Event | undefi
   const authorPk = store.externalAuthor || store.anchorAuthor;
   if (!authorPk) return;
 
-  const events: Event[] = await pool.querySync(store.readRelays, { kinds: [Contacts], authors: [signersStore.active!.pk], until: Infinity });
-  let contacts: Event | undefined;
-  events.forEach(e => {
-    if (!contacts || e.created_at > contacts.created_at) {
-      contacts = e;
-    }
-  });
+  const contacts = await pool.querySyncLast(store.readRelays, { kinds: [Contacts], authors: [signersStore.active!.pk], until: Infinity });
   if (!contacts) return;
 
   const subscribed = contacts

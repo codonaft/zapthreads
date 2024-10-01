@@ -1,7 +1,7 @@
 import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on, onMount } from "solid-js";
 import { defaultPicture, parseContent, shortenEncodedId, svgWidth, totalChildren, errorText, getSigner } from "./util/ui.ts";
 import { DAY_IN_SECS, WEEK_IN_SECS, currentTime, sortByDate, timeAgo } from "./util/date-time.ts";
-import { signAndPublishEvent, manualLogin, validateNestedNoteEvent } from "./util/network.ts";
+import { signAndPublishEvent, manualLogin, validateNestedNoteEvent, pool } from "./util/network.ts";
 import { ReplyEditor } from "./reply.tsx";
 import { NestedNoteEvent } from "./util/nest.ts";
 import { Votes } from "./votes.tsx";
@@ -214,13 +214,18 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               pubkey: signer.pk,
               tags: [[...tagPrefix, report.type || 'other']],
             }, signer);
-            const sentMutelistRequest = await signAndPublishEvent({
+
+            const mutelist = await pool.querySyncLast(store.readRelays, { kinds: [Mutelist], authors: [signer.pk], until: Infinity });
+            const mutelistTags = mutelist ? mutelist!.tags.filter(i => i.length >= 2 && ['e', 'p'].includes(i[0])) : [];
+            const alreadyInMutelist = mutelistTags.find(i => JSON.stringify(i) === JSON.stringify(tagPrefix)) !== undefined;
+            const sentMutelistRequest = alreadyInMutelist || await signAndPublishEvent({
               kind: Mutelist,
               created_at: currentTime(),
               content: report.reason || '',
               pubkey: signer.pk,
-              tags: [tagPrefix],
+              tags: [...mutelistTags, tagPrefix],
             }, signer);
+
             if (sentReportRequest || sentMutelistRequest) {
               remove('events', [eid]); // TODO: subscribe to new reports instead?
             }
