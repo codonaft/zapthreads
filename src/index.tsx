@@ -243,7 +243,7 @@ const ZapThreads = (props: { [key: string]: string; }) => {
     const newLikeIds = new Set<string>();
     const newZaps: { [id: string]: string; } = {};
     let newPks = new Set<Pk>();
-    const requestedProfileUpdate = new Set<Pk>();
+    store.requestedProfileUpdate.clear();
 
     sub = await pool.subscribeManyMap(
       Object.fromEntries(_readRelays.map(request)),
@@ -272,8 +272,6 @@ const ZapThreads = (props: { [key: string]: string; }) => {
           })()
         },
         oneoseOnRelay(relay) {
-          newPks = new Set([...newPks].filter(pk => !requestedProfileUpdate.has(pk)));
-          newPks.forEach(pk => requestedProfileUpdate.add(pk));
           updateProfiles(newPks, _readRelays, _profiles);
           newPks.clear();
         },

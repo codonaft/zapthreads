@@ -24,7 +24,7 @@ import { bytesToHex } from "@noble/hashes/utils";
 
 export const NOTE_KINDS = [ShortTextNote, Highlights];
 export const CONTENT_KINDS = [...NOTE_KINDS, Reaction, Zap];
-export const PROFILE_RELAYS = ['wss://purplepag.es/', 'wss://hist.nostr.land'];
+export const PROFILE_RELAYS = ['wss://purplepag.es/', 'wss://hist.nostr.land/'];
 
 type SubscribeManyParams = SubscribeManyParamsDefault & { oneoseOnRelay?: (relay: string) => void; };
 
@@ -85,7 +85,7 @@ class PrioritizedPool {
 
     const reloadFromProfile = async () => {
       const pk = signersStore.active!.pk;
-      const lastEvent = await this.querySyncLast([...store.readRelays, ...PROFILE_RELAYS], { authors: [pk], kinds: [RelayList] });
+      const lastEvent = await this.queryProfileEvent({ authors: [pk], kinds: [RelayList] });
       const tags = lastEvent ? lastEvent.tags : [];
       const externalRelays = Object.fromEntries(
        tags
@@ -327,13 +327,27 @@ class PrioritizedPool {
     })
   }
 
-  async querySyncLast(
+  async queryLast(
     relays: string[],
     filter: Filter,
     params?: Pick<SubscribeManyParams, 'id' | 'maxWait'>,
   ): Promise<Event | undefined> {
     const events = await this.querySync(relays, filter, params);
     return maxBy(events, e => e.created_at);
+  }
+
+  async queryProfileEvent(
+    filter: Filter,
+    params?: Pick<SubscribeManyParams, 'id' | 'maxWait'>,
+  ): Promise<Event | undefined> {
+    let relays = [...store.readRelays, ...store.writeRelays, ...PROFILE_RELAYS];
+    if (signersStore.active) {
+      const profileRelays = await find('profileRelays', IDBKeyRange.only(signersStore.active.pk));
+      if (profileRelays) {
+        relays = [...relays, ...Object.keys(JSON.parse(profileRelays.relays))];
+      }
+    }
+    return await this.queryLast(relays, filter, params);
   }
 
   async publishEvent(event: Event): Promise<{ ok: number, failures: number }> {
@@ -882,7 +896,7 @@ export const fetchContactsAndUpdateSubscribed = async (): Promise<Event | undefi
   const authorPk = store.externalAuthor || store.anchorAuthor;
   if (!authorPk) return;
 
-  const contacts = await pool.querySyncLast(store.readRelays, { kinds: [Contacts], authors: [signersStore.active!.pk], until: Infinity });
+  const contacts = await pool.queryProfileEvent({ kinds: [Contacts], authors: [signersStore.active!.pk] });
   if (!contacts) return;
 
   const subscribed = contacts

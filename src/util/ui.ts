@@ -15,7 +15,10 @@ import { currentTime } from "./date-time.ts";
 
 // Misc profile helpers
 
-export const updateProfiles = async (pubkeys: Set<Pk>, relays: string[], profiles: Profile[]): Promise<void> => {
+export const updateProfiles = async (pks: Set<Pk>, relays: string[], profiles: Profile[]): Promise<void> => {
+  const pubkeys = new Set([...pks].filter(pk => !store.requestedProfileUpdate.has(pk)));
+  pubkeys.forEach(pk => store.requestedProfileUpdate.add(pk));
+
   const kind = Metadata;
   const now = +new Date;
   const sixHours = 21600000;
@@ -40,11 +43,11 @@ export const updateProfiles = async (pubkeys: Set<Pk>, relays: string[], profile
     .filter(([pk, p]) => pubkeysToUpdate.has(pk))
     .map(([_, p]) => p.l ? p.l + 1 : 0));
 
-  const { fastRelays, slowRelays } = await rankRelays(relays, { kind });
+  const { fastRelays, slowRelays } = await rankRelays([...relays, ...PROFILE_RELAYS], { kind });
   const filters = [{ kinds: [kind], authors: [...pubkeysToUpdate], since: since === Infinity ? 0 : since }];
   const update = async (relays: string[]) => {
     if (relays.length === 0) return;
-    await pool.subscribeManyEose([...relays, ...PROFILE_RELAYS], filters, {
+    await pool.subscribeManyEose(relays, filters, {
       onevent(e: Event) {
         const pubkey = e.pubkey;
         if (!pubkeysToUpdate.has(pubkey)) return;

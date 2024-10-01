@@ -28,6 +28,7 @@ describe("ui utils", () => {
       moderators: new ReactiveSet,
       subscribed: newSignal(false),
       profiles: () => [],
+      requestedProfileUpdate: new Set,
       rootEventIds: [],
       topRootEventIds: new Set,
       userObservedComments: false,

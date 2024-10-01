@@ -37,6 +37,7 @@ export const store = createMutable<PreferencesStore>({
   subscribed: newSignal(false),
   filter: {},
   profiles: () => [],
+  requestedProfileUpdate: new Set,
 });
 
 export const signersStore = createMutable<SignersStore>({});
@@ -121,6 +122,7 @@ export type PreferencesStore = {
 
   subscribed: Signal<boolean>;
   profiles: () => Profile[];
+  requestedProfileUpdate: Set<Pk>;
   onLogin?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin?: boolean; }>;
   onEvent?: (event: { rankable: boolean; kind: number; content: string; replies: number; upvotes: number; downvotes: number; pow: number; followedByModerator: boolean; language?: string; client?: string; }) => { sanitizedContent?: string; rank?: number; showReportButton?: boolean; };
   onPublish?: (event: { relays: string[]; }) => Promise<{ accepted: boolean; }>;
