@@ -329,7 +329,11 @@ class PrioritizedPool {
   }
 
   async publishEvent(event: Event): Promise<{ ok: number, failures: number }> {
-    const writeRelays = store.writeRelays;
+    let writeRelays = store.writeRelays;
+    if (writeRelays.length === 0) {
+      await this.updateRelays();
+    }
+    writeRelays = store.writeRelays;
     const { fastRelays, slowRelays, offlineRelays, unsupported } = await rankRelays(writeRelays, { event, write: true });
 
     console.log(
