@@ -1,4 +1,4 @@
-import { defaultPicture, generateTags, satsAbbrev, shortenEncodedId, updateProfiles, errorText, getSigner } from "./util/ui.ts";
+import { picturePlaceholder, generateTags, satsAbbrev, shortenEncodedId, updateProfiles, errorText, getSigner } from "./util/ui.ts";
 import { signAndPublishEvent, sign, pool, manualLogin, logout, validateWriteEvent, toggleSubscribe } from "./util/network.ts";
 import { Show, createEffect, createSignal } from "solid-js";
 import { UnsignedEvent, Event } from "nostr-tools/core";
@@ -196,6 +196,13 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
   const maxCommentLength = () => store.maxCommentLength;
   const tooLong = () => comment().length > maxCommentLength();
 
+  const placeholder = () => picturePlaceholder(loggedInUser()?.pk);
+  const profilePicture = newSignal(placeholder());
+
+  createEffect(async () => {
+    profilePicture(loggedInUser()?.i || placeholder());
+  });
+
   return <div class="ztr-reply-form">
     <textarea
       disabled={loading()}
@@ -217,7 +224,7 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
         </svg>
       }>
         <div class="ztr-comment-info-picture">
-          <img src={loggedInUser()?.i || defaultPicture} />
+          <img src={profilePicture()} onerror={() => profilePicture(placeholder())} />
         </div>
       </Show>
 

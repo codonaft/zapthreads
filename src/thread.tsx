@@ -1,5 +1,5 @@
 import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on, onMount } from "solid-js";
-import { defaultPicture, parseContent, shortenEncodedId, svgWidth, totalChildren, errorText, getSigner } from "./util/ui.ts";
+import { picturePlaceholder, parseContent, shortenEncodedId, svgWidth, totalChildren, errorText, getSigner } from "./util/ui.ts";
 import { DAY_IN_SECS, WEEK_IN_SECS, currentTime, sortByDate, timeAgo } from "./util/date-time.ts";
 import { signAndPublishEvent, manualLogin, validateNestedNoteEvent, pool, PROFILE_RELAYS } from "./util/network.ts";
 import { ReplyEditor } from "./reply.tsx";
@@ -231,22 +231,15 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
             }
           };
 
-          const profilePicture = newSignal(defaultPicture);
-
           const pubkey = () => event().pk;
           const npub = () => npubEncode(pubkey());
           const profile = () => profiles().find(p => p.pk === pubkey());
 
-          const picturePlaceholder = () => {
-            const p = store.urlPrefixes!.picture;
-            if (!p) return;
-            const url = new URL(p);
-            url.pathname = npub();
-            return url.href;
-          };
+          const placeholder = () => picturePlaceholder(pubkey());
+          const profilePicture = newSignal(placeholder());
 
           createEffect(async () => {
-            profilePicture(profile()?.i || picturePlaceholder() || defaultPicture);
+            profilePicture(profile()?.i || placeholder());
           });
 
           // Update createdAt every minute
@@ -297,7 +290,7 @@ export const Thread = (props: { topNestedEvents: () => NestedNoteEvent[]; bottom
               <div class="ztr-comment-info-wrapper">
                 <div class="ztr-comment-info">
                   <div class="ztr-comment-info-picture">
-                    <img src={profilePicture()} onerror={() => profilePicture(defaultPicture)} />
+                    <img src={profilePicture()} onerror={() => profilePicture(placeholder())} />
                   </div>
                   <ul class="ztr-comment-info-items">
                     <li class="ztr-comment-info-author">

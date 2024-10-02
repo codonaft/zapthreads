@@ -73,6 +73,7 @@ node_modules/.bin/vite build
   anchor="naddr1qqxnzd3cxqmrzv3exgmr2wfeqgsxu35yyt0mwjjh8pcz4zprhxegz69t4wr9t74vk6zne58wzh0waycrqsqqqa28pjfdhz"
   relays="wss://relay.nostr.band,wss://nostr-pub.wellorder.net/"
   disable="likes,singleVoteCounter"
+  urls="naddr:nostr.at/,npub:nostr.at/,nprofile:nostr.at/,nevent:nostr.at/,note:nostr.at/,tag:snort.social/t/,picture:robohash.org/?set=set4"
   />
 
 <script>
@@ -108,7 +109,7 @@ Arguments:
    - `spamNostrBand`
    - `followIsApproval`
  - `urls`: comma-separated pairs of URLs
-   - defaults to `naddr:nostr.at/,npub:nostr.at/,nprofile:nostr.at/,nevent:nostr.at/,note:nostr.at/,tag:snort.social/t/,picture:robohash.org/?set=set4`
+   - defaults to `naddr:nostr.at/,npub:nostr.at/,nprofile:nostr.at/,nevent:nostr.at/,note:nostr.at/,tag:snort.social/t/,picture:`
    - `https://` will be automatically prepended
  - `language`: allowed language, no restrictions by default
    - ISO-639-1 two-letter code only

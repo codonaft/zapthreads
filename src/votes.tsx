@@ -1,5 +1,5 @@
 import { Index, Show, createEffect, createComputed, createMemo, createSignal, onCleanup, batch, on, onMount } from "solid-js";
-import { defaultPicture, parseContent, shortenEncodedId, svgWidth, totalChildren, errorText, getSigner } from "./util/ui.ts";
+import { parseContent, shortenEncodedId, svgWidth, totalChildren, errorText, getSigner } from "./util/ui.ts";
 import { DAY_IN_SECS, WEEK_IN_SECS, currentTime, sortByDate, timeAgo } from "./util/date-time.ts";
 import { signAndPublishEvent, manualLogin, validateNestedNoteEvent } from "./util/network.ts";
 import { noteEncode, npubEncode } from "nostr-tools/nip19";

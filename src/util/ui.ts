@@ -12,6 +12,7 @@ import { store } from "./stores.ts";
 import { NoteEvent, Profile, Pk, Eid, ReactionEvent } from "./models.ts";
 import { pool, rankRelays, PROFILE_RELAYS, manualLogin } from "./network.ts";
 import { currentTime } from "./date-time.ts";
+import { generatePicture } from "./picture.ts";
 
 // Misc profile helpers
 
@@ -193,14 +194,12 @@ export const parseUrlPrefixes = (value: string = '') => {
     nevent: 'https://nostr.at/',
     note: 'https://nostr.at/',
     tag: 'https://snort.social/t/',
-    picture: 'https://robohash.org/?set=set4',
+    picture: '',
   };
 
   for (const pair of value.split(',')) {
     const [key, value] = pair.split(':');
-    if (value) {
-      result[key as UrlPrefixesKeys] = `https://${value}`;
-    }
+    result[key as UrlPrefixesKeys] = value ? `https://${value}` : '';
   }
   return result;
 };
@@ -210,7 +209,22 @@ export const shortenEncodedId = (encoded: string) => {
 };
 
 export const svgWidth = 20;
-export const defaultPicture = 'data:image/svg+xml;utf-8,<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><circle cx="512" cy="512" r="512" fill="%23333" fill-rule="evenodd" /></svg>';
+const defaultPicture = 'data:image/svg+xml;utf-8,<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg"><circle cx="512" cy="512" r="512" fill="%23333" fill-rule="evenodd" /></svg>';
+
+export const picturePlaceholder = (pk?: Pk) => {
+  if (!pk) {
+    return defaultPicture;
+  }
+
+  const p = store.urlPrefixes!.picture;
+  if (p) {
+    const url = new URL(p);
+    url.pathname = pk;
+    return url.href;
+  } else {
+    return generatePicture(pk);
+  }
+};
 
 export const satsAbbrev = (sats: number): string => {
   if (sats < 10000) {
