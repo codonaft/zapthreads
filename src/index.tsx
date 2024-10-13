@@ -471,7 +471,7 @@ ZapThreads.onEvent = function (cb?: (event: { rankable: boolean; kind: number; c
   return ZapThreads;
 };
 
-ZapThreads.onPublish = function (cb?: (event: { relays: string[]; }) => Promise<{ accepted: boolean; }>) {
+ZapThreads.onPublish = function (cb?: (event: { relays: string[]; }) => Promise<{ accepted: boolean; concurrent?: boolean; }>) {
   store.onPublish = cb;
   return ZapThreads;
 };

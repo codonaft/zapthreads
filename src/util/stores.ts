@@ -125,7 +125,7 @@ export type PreferencesStore = {
   requestedProfileUpdate: Set<Pk>;
   onLogin?: (options: { knownUser: boolean; }) => Promise<{ accepted: boolean; autoLogin?: boolean; }>;
   onEvent?: (event: { rankable: boolean; kind: number; content: string; replies: number; upvotes: number; downvotes: number; pow: number; followedByModerator: boolean; language?: string; client?: string; }) => { sanitizedContent?: string; rank?: number; showReportButton?: boolean; };
-  onPublish?: (event: { relays: string[]; }) => Promise<{ accepted: boolean; }>;
+  onPublish?: (event: { relays: string[]; }) => Promise<{ accepted: boolean; concurrent?: boolean; }>;
   onRemove?: (event: { content: string; }) => Promise<{ accepted: boolean; }>;
   onReport?: (event: {}) => Promise<{ accepted?: boolean; list?: 'event' | 'pubkey'; type?: 'nudity' | 'malware' | 'profanity' | 'illegal' | 'spam' | 'impersonation' | 'other'; reason?: string; }>;
 };

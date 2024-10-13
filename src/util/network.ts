@@ -362,26 +362,59 @@ class PrioritizedPool {
       `[zapthreads] publishing to ${fastRelays.length + slowRelays.length} relays` +
       (unsupported + offlineRelays > 0 ? ` (ignored ${unsupported} unsupported, ${offlineRelays} failing)` : ''));
 
-    if (store.onPublish && !(await store.onPublish({ relays: [...fastRelays, ...slowRelays] })).accepted) {
-      return { ok: 0, failures: 0 };
+    let concurrent = true;
+    if (store.onPublish) {
+      const onPublishResult = await store.onPublish({ relays: [...fastRelays, ...slowRelays] });
+      if (!onPublishResult.accepted) {
+        return { ok: 0, failures: 0 };
+      } else if (onPublishResult.concurrent !== undefined) {
+        concurrent = onPublishResult.concurrent!;
+      }
     }
 
-    const result = await this.concurrentPublish(event, fastRelays);
-    this.concurrentPublish(event, slowRelays);
+    const result = await this.publish(event, fastRelays, concurrent);
+    this.publish(event, slowRelays, concurrent);
 
     return result;
   }
 
-  private async concurrentPublish<T>(event: Event, relays: string[]): Promise<{ ok: number, failures: number }> {
+  private async publish(event: Event, relays: string[], concurrent: boolean): Promise<{ ok: number, failures: number }> {
     if (relays.length === 0) return { ok: 0, failures: 0 };
 
+    if (concurrent) {
+      return await this.concurrentPublish(event, relays);
+    } else {
+      return await this.sequentialPublish(event, relays);
+    }
+  }
+
+  private async concurrentPublish(event: Event, relays: string[]): Promise<{ ok: number, failures: number }> {
     const startTime = Date.now();
     const tasks = relays.map(async (relayUrl) => await this.publishOnRelay(relayUrl, event));
     const results = await Promise.allSettled(tasks);
     const deltaTime = Date.now() - startTime;
 
     const { ok, failures } = countResults(results, relays);
-    console.log(`[zapthreads] event ${event.id} published in ${deltaTime} ms to ${ok} relays (${failures} failed)`, relays);
+    console.log(`[zapthreads] event ${event.id} published concurrently in ${deltaTime} ms to ${ok} relays (${failures} failed)`, relays);
+    return { ok, failures };
+  }
+
+  private async sequentialPublish(event: Event, relays: string[]): Promise<{ ok: number, failures: number }> {
+    let ok = 0;
+    let failures = 0;
+    const startTime = Date.now();
+    for (const relayUrl of relays) {
+      try {
+        await this.publishOnRelay(relayUrl, event);
+        ok++;
+      } catch (err) {
+        console.error(err);
+        failures++;
+      }
+    }
+    const deltaTime = Date.now() - startTime;
+
+    console.log(`[zapthreads] event ${event.id} published sequentially in ${deltaTime} ms to ${ok} relays (${failures} failed)`, relays);
     return { ok, failures };
   }
 

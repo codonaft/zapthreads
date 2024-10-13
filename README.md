@@ -186,7 +186,7 @@ ZapThreads
     if (relays.length === 0) {
       // no available write relays, perhaps they are not set
     }
-    return { accepted: true };
+    return { accepted: true, concurrent: true };
   })
   .start();
 ```
