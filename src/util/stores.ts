@@ -20,6 +20,7 @@ export const store = createMutable<PreferencesStore>({
   userStartedReadingComments: false,
   commentContexts: new Map,
 
+  additionalTags: [],
   maxCommentLength: 0,
   writePowDifficulty: 0,
   minReadPow: 0,
@@ -83,21 +84,22 @@ export type CommentContext = {
 };
 
 export type PreferencesStore = {
-  ready: Signal<boolean>,
+  ready: Signal<boolean>;
 
-  anchor?: Anchor, // derived from anchor prop
+  anchor?: Anchor; // derived from anchor prop
   readRelays: string[];
   writeRelays: string[];
   version?: string;  // derived from version prop
   rootEventIds: string[];  // derived from anchor prop
-  topRootEventIds: Set<Eid>,
-  userObservedComments: boolean,
-  userStartedReadingComments: boolean,
-  commentContexts: Map<Eid, CommentContext>,
+  topRootEventIds: Set<Eid>;
+  userObservedComments: boolean;
+  userStartedReadingComments: boolean;
+  commentContexts: Map<Eid, CommentContext>;
 
   client?: string;
-  language?: string,
-  maxCommentLength: number,
+  language?: string;
+  additionalTags: string[][];
+  maxCommentLength: number;
   writePowDifficulty: number;
   minReadPow: number;
   maxWritePow: number;
@@ -107,13 +109,13 @@ export type PreferencesStore = {
     pubkeysFollowed: Set<Pk>;
     checkUpdates: boolean;
   };
-  ranks: Map<Eid, number>,
+  ranks: Map<Eid, number>;
   showReportButton: Set<Eid>;
 
   filter: Filter;  // derived from anchor prop
   externalAuthor?: string; // prop, mostly used with http anchor type
   disableFeatures?: DisableType[]; // prop
-  urlPrefixes?: { [key in UrlPrefixesKeys]?: string }, // prop
+  urlPrefixes?: { [key in UrlPrefixesKeys]?: string }; // prop
   replyPlaceholder?: string,
 
   anchorAuthor?: string;

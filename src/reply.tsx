@@ -2,6 +2,7 @@ import { picturePlaceholder, generateTags, satsAbbrev, shortenEncodedId, updateP
 import { signAndPublishEvent, sign, pool, manualLogin, logout, validateWriteEvent, toggleSubscribe } from "./util/network.ts";
 import { Show, createEffect, createSignal } from "solid-js";
 import { UnsignedEvent, Event } from "nostr-tools/core";
+import { unwrap } from "solid-js/store";
 import { EventSigner, signersStore, store } from "./util/stores.ts";
 import { currentTime } from "./util/date-time.ts";
 import { generateSecretKey, getPublicKey, getEventHash, finalizeEvent } from "nostr-tools/pure";
@@ -169,6 +170,10 @@ export const ReplyEditor = (props: { comment: Signal<string>; replyTo?: string; 
     if (store.language) {
       unsignedEvent.tags.push(['L', 'ISO-639-1']);
       unsignedEvent.tags.push(['l', store.language!, 'ISO-639-1']);
+    }
+
+    for (const tag of unwrap(store.additionalTags)) {
+      unsignedEvent.tags.push(tag);
     }
 
     setLoading(true);

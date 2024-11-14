@@ -486,4 +486,8 @@ ZapThreads.onReport = function (cb?: (event: {}) => Promise<{ accepted?: boolean
   return ZapThreads;
 };
 
+ZapThreads.setAdditionalTags = function (tags: string[][]) {
+  store.additionalTags = tags;
+};
+
 ZapThreads.start = () => store.ready(true);

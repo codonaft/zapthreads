@@ -13,6 +13,7 @@ describe("ui utils", () => {
       readRelays: [],
       writeRelays: [],
       filter: {},
+      additionalTags: [],
       maxCommentLength: 0,
       writePowDifficulty: 0,
       minReadPow: 0,

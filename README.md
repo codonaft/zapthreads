@@ -188,6 +188,7 @@ ZapThreads
     }
     return { accepted: true, concurrent: true };
   })
+  .setAdditionalTags([['t', 'test']]) // arbitrary tags for text notes
   .start();
 ```
 
