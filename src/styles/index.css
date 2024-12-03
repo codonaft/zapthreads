@@ -305,6 +305,10 @@ li.ztr-comment-action-upvote {
   }
 }
 
+div.ztr-comment-new li.ztr-comment-action-upvote {
+  margin-left: 1.2em;
+}
+
 li.ztr-comment-action-downvote {
   margin-left: 0.5em;
   margin-right: 0.5em;
@@ -524,7 +528,6 @@ li.ztr-comment-action-votes {
   justify-content: center;
   align-items: center;
 
-  margin-right: 2em;
   margin-top: 1em;
   margin-bottom: 1em;
 
